@@ -466,7 +466,7 @@ if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
  [ -d "$projectdir$sourcedir" ] ||
   { echo 'invalid sourcedir '"$projectdir$sourcedir"; exit; }
  [ -d "$projectdir$targetdir" ] ||
-  { echo 'invalid targetdir'"$projectdir$targetdir"; exit; }
+  { echo 'invalid targetdir '"$projectdir$targetdir"; exit; }
  [ "$prloc" = 'default' ] &&
   echo "$prloc"' registration' # hard-coded
  if [ "$state" = 'single' ]; then
