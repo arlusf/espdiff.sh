@@ -595,7 +595,7 @@ supreport(){
   while IFS='' read -r missing; do
    padline '' "$missing"
    done; } |
-   sed -nr -- 's/^<(.*) /'"$clrsrc"'>'"$clrmsf"'\1/p
+   sed -nr -- 's/^<(.*) /'"$clrsrc"'>'"$clrmsf"'\1 /p
     s/^>(.*) /'"$clrtgt"' <'"$clrmsf"'\1/p' |
     sort -r --  )"
  # write supplemental report data to stdout
