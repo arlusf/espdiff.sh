@@ -1,5 +1,5 @@
-#!/home/busybox/busybox-1.32.1/busybox sh
 #!/bin/bash
+#!/home/busybox/busybox-1.32.1/busybox sh
 
 # Copyright April 1st, 2021 arlusf@github, all rights reserved
 # this version does not offer any license agreement
@@ -16,17 +16,17 @@ name='  espdiff.sh  version 5.0'
 #      >$  ./espdiff.sh help
 
 ##  install
-#    project:  configuration file, registration file or qwik-eze
+#    project:  configuration file, registration file or hard-coded
 #    shell:    move bash shebang to first line as required
 #    options:  confirm general options below
 
-###  qwik-eze
-#     uncomment to define default project paths
+###  hard-coded
+## uncomment to define default project paths
  # projectdir="$HOME"'/path/to/project/base'
  # sourcedir='current'
  # targetdir='previous'
 
-### general options
+###  general options
 ## locate configfile in a secure area
 readonly configfile="$HOME"'/.local/.espdiffrc' # one seat license
  # configfile='/root/espdiff/.espdiffrc' # embedded devices
@@ -40,7 +40,7 @@ tmpdir='/tmp'
 ## restriction on file and directory names
 allowchars='a-zA-Z0-9/\_. -' # literal dash - last
 
-### format options
+###  format options
 columns="$(stty size)" # generally available
 lines="$columns"; lines="${lines% *}"
 columns="${columns#* }"
@@ -300,25 +300,26 @@ sanitize(){
  seqrx="$escape"'[^m]*m' # m is CSI end char
  if [ "$1" ]; then
   regfile="$1"
-  absolute="${1%/*}/"
+  absolute="$currentdir/${1%/*}"
  else
   regfile='.esprj'
-  absolute=''
+  absolute="$currentdir"
+  [ "$prloc" = 'parent' ] && absolute="${absolute%/*}"
  fi
- # escape forward slashes in path
- # (do not restrict use of an arbitrary path/filename char to delimit sed)
- absolute="$( echo "$currentdir/$absolute" | sed 's_/_\\/_g' )"
- fixrel="s/(projectdir=')([^/][^']*')/\1"
  # strip blank and comment lines along with any preceeding whitespace
  sed -r -- 's/'"$seqrx"'//g;/^\s*(#.*)?$/d' "$regfile" |
   tee -- "$esprjtmp" |
    # filter sequences with correct option=value, once per line
    # insert blank line if $regx does not match
    sed -rn -- 's/.*'"$regx"'.*/\1/p;te;i
-:e' | tee -- "$esprjraw" | 
+:e' | tee -- "$esprjraw" | {
+    # escape forward slashes in path
+    # (do not restrict use of any arbitrary path/filename char to delimit sed)
+    absolute="${absolute//\//\\/}"'\/'
     # fix relative projectdir in session registration file 
+    fixrel="s/(projectdir=')([^/][^']*')/\1"
     sed -r -- "$fixrel$absolute"'\2/;Te;i# fixed relative projectdir
-:e' > "$esprj"
+:e'; } > "$esprj"
  # send rejected lines to stderr
  diff -yt -- "$esprjraw" "$esprjtmp" |
   #grep -oP --color=always -- '^\s+\|\K.*' 1>&2
@@ -371,7 +372,7 @@ esprj="$sessiondir"'.esprj' # session project file
 readonly currentdir="$( pwd )"
 colors='bg|brf|msf|tgt|src|smd|txt|ttl|new|tmd|rmv|err'
 
-## include project registration file
+##  include project registration file
 # explicit
 if [ "$1" = 'register' ]; then
  [ -n "$2" ] && {
@@ -424,7 +425,7 @@ padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
 bgpoly="$( printf "%-${columns}s" )"
 bgline="$clrbg$bgpoly"
 
-## main arguments
+##  main arguments
 mode='one' # display
 state='default' # semaphore
 case "$1" in
@@ -456,17 +457,22 @@ fi
 
 # validate inputs
 if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
- [ -d "$projectdir" ] || { echo 'invalid projectdir: '"$projectdir"; exit; }
- [ -d "$projectdir$sourcedir" ] || { echo 'invalid sourcedir'; exit; }
- [ -d "$projectdir$targetdir" ] || { echo 'invalid targetdir'; exit; }
- [ "$prloc" = 'default' ] && echo "$prloc"' registration' # qwik-eze
- cd "$projectdir" || exit
+ projectdir="$( fixup "$projectdir" )"
  sourcedir="$( fixup "$sourcedir" )"
  targetdir="$( fixup "$targetdir" )"
- projectdir="$( fixup "$projectdir" )"
+ [ -d "$projectdir" ] ||
+  { echo 'invalid projectdir: '"$projectdir"; exit; }
+ cd "$projectdir" || exit
+ [ -d "$projectdir$sourcedir" ] ||
+  { echo 'invalid sourcedir '"$projectdir$sourcedir"; exit; }
+ [ -d "$projectdir$targetdir" ] ||
+  { echo 'invalid targetdir'"$projectdir$targetdir"; exit; }
+ [ "$prloc" = 'default' ] &&
+  echo "$prloc"' registration' # hard-coded
  if [ "$state" = 'single' ]; then
   sproj="$projectdir$sourcedir$1"
-  if [ -f "$sproj" ]; then sourcedir="$sourcedir$1"
+  if [ -f "$sproj" ]; then
+   sourcedir="$sourcedir$1"
   else
    [ '?' != "$1" ] && help="or 'help'" &&
     notfile='not a project file: '"$clrerr$sproj$reset"
@@ -631,10 +637,10 @@ mainloop(){
 }
 
 
-## change terminal window title, assume $PS1 resets this
+##  change terminal window title, assume $PS1 resets this
 printf '%s' "$titlepre$titletxt$terminator"
 
-## pre-formatting
+##  pre-formatting
 even=$(( columns % 2 )) # adjust for odd number of columns
 dseparator='----' # width of max line number (9999)
 nmax=${#dseparator}
@@ -648,21 +654,21 @@ dspace="${bgpoly::$dspclen}"
 # spacing to fill separator lines
 sepspace="${dspace:1}"
 
-## setup temp folder, exit trap handles removal
+##  setup temp folder, exit trap handles removal
 texit(){ [ -n "$reportdir" ] && [ "$mode" = 'keep' ] || rm -rf -- "$reportdir"; }
 unset reportdir
 trap texit EXIT
 reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
  { printf '%serror creating temp file\n' "$clrerr" 1>&2; exit 1; }
 
-## assign brief names
+##  assign brief names
 unknown="$reportdir"'/_000_unknown_'
 errorfile="$reportdir"'/_001_error_'
 missfile="$reportdir"'/_002_missing_'
 changefile="$reportdir"'/_003_changed'
 samefile="$reportdir"'/_004_same'
 
-## initiate diff reports
+##  initiate diff reports
 if [ "$state" = 'dual' ]; then
  # directly dispatch extra-project 'file' runs
  diffproc;
@@ -692,7 +698,7 @@ finish(){
 }
 
 
-## post-processing
+##  post-processing
 # prepare brief section labels
 # missing files section is prepped in 'initiate diff reports'
 padline "$clrbg$bgline
@@ -746,7 +752,7 @@ elif [ "$mode" = 'one' ]; then
  fi
 fi
 
-## display
+##  display
 if [ "$mode" = 'page' ]; then
  # paged, less
  less -rc -- "$reportdir"/*
@@ -765,74 +771,76 @@ fi
 exit
 
 
-### footnote
+###  footnote
 
-## xterm
-#   TERM='xterm-256color'
-#   menus C-left/right mouse
+##  xterm
+#    TERM='xterm-256color'
+#    menus C-left/right mouse
 
-## tmux
-#   TERM='screen-256color' or 'tmux-256color'
-#   scrollback C-b [
+##  tmux
+#    TERM='screen-256color' or 'tmux-256color'
+#    scrollback C-b [
 
-## screen
-#   24bit direct-color in master branch (at least since 4.99)
-#   TERM='screen-256color'
-#   bce is not enabled by default
-#   C-a : bce on, or insert 'bce on' line into screenrc file
+##  screen
+#    24bit direct-color in master branch (at least since 4.99)
+#    TERM='screen-256color'
+#    bce is not enabled by default
+#    C-a : bce on, or insert 'bce on' line into screenrc file
 
-## less
-#   fast - files do not have to load completely before display begins
-#   caveat: no line color buffer for hidden lines
-#   (scroll-back coloring is reversed)
+##  less
+#    fast - files do not have to load completely before display begins
+#    caveat: no line color buffer for hidden lines
+#    (scroll-back coloring is reversed)
 
-## strategies for consistent background color
-#   print to each cell of window text area then over-writing, or
-#   pad each line with spaces to edge of screen, or
-#   'yellow background\033[43m home\033[H erase\033[J' or
-#   '\e[K' at start of each line, then erase to bottom of screen
-#   caution: CSI K at exactly the end of a line can delete its last character
-#   not every terminal control-sequence code enjoys broad support
-#   even so, actual rendering may not be equivalent
+##  strategies for consistent background color
+#    print to each cell of window text area then over-writing, or
+#    pad each line with spaces to edge of screen, or
+#    'yellow background\033[43m home\033[H erase\033[J' or
+#    '\e[K' at start of each line, then erase to bottom of screen
+#    caution: CSI K at exactly the end of a line can delete its last character
+#    not every terminal control-sequence code enjoys broad support
+#    even so, actual rendering may not be equivalent
 
-## 256color index
-#   lookup tables shipped onboard a vga graphics card eprom
-#   rgb levels were originally preconfigured to suit crt display hardware
-#   variation today can result from algorithm discrepancy or preference
-#  0-7 first 8 - ANSI color names, linux kernel system palette
-#   color selection was limited to this range initially
-#  8-15 next 8 - bright versions of first 8 colors, or may be bold font
-#   terminal themes are implemented in the first sixteen colors
-#  16-231 color cube - six intensity levels for  r, g, b  coordinates
-#   decimal  0, 95, 135, 175, 215, 255  (00, 5f, 87, af, d7, ff hex)
-#  232-255 greyscale - 24 shades,  8+(10*shade),  8;8;8m - 238;238;238m
+##  256color index
+#    lookup tables shipped onboard a vga graphics card eprom
+#    rgb levels were originally preconfigured to suit crt display hardware
+#    variation today can result from algorithm discrepancy or preference
+#   0-7 first 8 - ANSI color names, linux kernel system palette
+#    color selection was limited to this range initially
+#   8-15 next 8 - bright versions of first 8 colors, or may be bold font
+#    terminal themes are implemented in the first sixteen colors
+#   16-231 color cube - six intensity levels for  r, g, b  coordinates
+#    decimal  0, 95, 135, 175, 215, 255  (00, 5f, 87, af, d7, ff hex)
+#   232-255 greyscale - 24 shades,  8+(10*shade),  8;8;8m - 238;238;238m
 
-## busybox
-#   if busybox is the default system shell:
-#    change shebang to #!/bin/sh
-#    install iconv and full versions of builtins diff, less
-#   distribution binary does not pass unit tests A or B:
-#    compile busybox-1.32.1 (latest stable)
-#     make defconfig
-#     make menuconfig - add or remove functionality/builtins*
-#     make
+##  busybox
+#    if busybox is the default system shell:
+#     change shebang to #!/bin/sh
+#     install iconv and full versions of builtins diff, less
+#    distribution binary does not pass unit tests A or B:
+#     compile busybox-1.32.1 (latest stable)
+#      make defconfig
+#      make menuconfig - add or remove functionality/builtins*
+#      make
 
-## unit tests - first line describes correct result
+##  unit tests - first line describes correct result
 #
-#   A) displays 'one' after 1 second duration
-#   sleep 3 && echo three & sleep 1 & wait -n; echo one
-#     wrong: displays 'one' immediately
+#    A) displays 'one' after 1 second duration
+#    sleep 3 && echo three & sleep 1 & wait -n; echo one
+#      wrong: displays 'one' immediately
 #
-#   B) displays 'qwe'
-#   a='asdfqwerty'; echo ${a:4:-3}
-#     error:
-#     sh: Illegal number: -3 
-#   ${ substring expansion variable : offset parameter : -length is negative }
-#     in Bash since 4.2-alpha, busybox?
+#    B) displays 'qwe'
+#    a='asdfqwerty'; echo ${a:4:-3}
+#      error:
+#      sh: Illegal number: -3 
+#    ${ substring expansion variable : offset parameter : -length is negative }
+#      in Bash since 4.2-alpha, busybox?
 
-## troubleshooting
+##  troubleshooting, theory of operation
 #
 #   $dpos is exact offset to the middle column in side-by-side diff output
 #   this is expected to be standard for any implemented diff
+#   using $dpos, grep provides line numbers, discarding unselected context
+#   the line is then split in half, colorized and reassembled
 
 ###EOF###
