@@ -3,7 +3,7 @@
 **A contemporary take on diff, the terminal control sequence and shell scripting in color**
 - documentation is built into the script file, including a footnote
 
-# getting started
+## getting started
 
 **extract example tarball:**
 
@@ -14,7 +14,7 @@ tar -xf example.tar
 bash espdiff.sh example/previous/version-2/fileA example/previous/version-1/fileA
 
 
-![](screenshots/example.png)
+[![](screenshots/example.jpg)](screenshots/example.png)
 
 
 **make script executable:**
@@ -24,7 +24,7 @@ chmod u+x espdiff.sh
 ./espdiff.sh
 
 
-![](screenshots/example2.png)
+[![](screenshots/example2.jpg)](screenshots/example2.png)
 
 
 **to include color name index:**
@@ -40,7 +40,7 @@ echo "testdirect='true'" >> .esprj
 ./espdiff.sh make
 
 
-![](screenshots/make.esprj.png)
+[![](screenshots/make.esprj.jpg)](screenshots/make.esprj.png)
 
 
 **color swatch and ramp:**
@@ -51,5 +51,4 @@ echo "testdirect='true'" >> .esprj
 ![](screenshots/colors.png)
 
 
-
-
+###### screenshot font is IBM Plex Mono Text
