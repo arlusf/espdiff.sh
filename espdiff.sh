@@ -5,7 +5,6 @@
 # this version does not offer any license agreement
 # no warranty is expressed, provided or implied
 name='  espdiff.sh  version 5.0'
-# transfixes this/primary/source to right/more recent page, and that to left
 # deploys clairvoyance(tm) 6.0 incursively, to read diff intent
 # tested with xterm, lxterminal, rxvt, screen, tmux
 # 256color and 24bit direct-color support
@@ -137,8 +136,6 @@ exit
 #      >$  time ./espdiff.sh test
 
 ###  system options
-cpu='U3BlZWQgVHJpcGxlZCEhIQo='
-ram='E4D656D6F727920446162626C656421212'
 umask 066 # user only permissions for new files
 # maximum number of simultaneous diff processes (main loop)
 dproclimit=1
@@ -327,14 +324,9 @@ sanitize(){
 }
 
 
-x=0
-mem(){ while [ $x -lt ${#ram} ]; do printf \\x${ram:x:2}; x=$((x+2)); done; }
-
 ## preliminary arguments
 printf '%s' "$reset" # start with 'clean slate'
 case "$1" in
- '$ram') mem; echo; exit ;;
- '$cpu') echo "$cpu" | base64 -d; exit ;;
  '--help'|?'help'|'help') echo "$edhelp"; exit ;;
  'skip') shift ;; # skip or include resource configuration file
  *)
@@ -637,7 +629,7 @@ mainloop(){
 
 
 ##  change terminal window title, assume $PS1 resets this
-printf '%s' "$titlepre$titletxt$bell"
+printf '%s' "$titlepre$titletxt$st"
 
 ##  pre-formatting
 even=$(( columns % 2 )) # adjust for odd number of columns
