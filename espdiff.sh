@@ -138,14 +138,13 @@ exit
 
 ###  system options
 cpu='U3BlZWQgVHJpcGxlZCEhIQo='
-ram='4D656D6F727920446162626C65642121'
+ram='E4D656D6F727920446162626C656421212'
 umask 066 # user only permissions for new files
 # maximum number of simultaneous diff processes (main loop)
 dproclimit=1
 # use external link instead of busybox builtins
 alias diff="$( which diff )" # -y option
 alias less="$( which less )" # -r option
-#alias grep="$(which grep)" # \K (-P option)
 
 ###  project options
 context=1 #  lines of leading and tailing context
@@ -165,9 +164,10 @@ testdirect='false'
 ##  terminal control sequences
 # C0 code bytes
 escape=$'\033' # ^ ascii escape key-code
-terminator=$'\007' # ST string terminator code
+bell=$'\007' # BEL
+st=$escape'\\' # ST is preferred
 # Operating System Command  OSC Ps ; Pt BEL
-# OSC=^]  Ps=0 change icon name and window title  ;  Pt=text  (BEL or ST)
+# OSC=^]  Ps=0 change icon name and window title  ;  Pt=text  (BEL or ST \e\\)
 titlepre=$escape']0;' # OSC  + change window title
 titletxt='espdiff.sh' # Pt
 bold=$escape'[1m'
@@ -264,7 +264,6 @@ $bgline
    eval "nam=\"\$$nam\""
    [ "${colr::${#fdc}}" = "$fdc" ] && key='$fdc' || key='$bdc'
   fi
-  #[ "$nam" ] || nam='unnamed'
   : "${nam:='unnamed'}"
   eval "typ=\$$typ"
   if [ "$1" = 'gen' ]; then
@@ -322,7 +321,6 @@ sanitize(){
 :e'; } > "$esprj"
  # send rejected lines to stderr
  diff -yt -- "$esprjraw" "$esprjtmp" |
-  #grep -oP --color=always -- '^\s+\|\K.*' 1>&2
   sed -nr -- 's/^\s+\|(.*)/'"$clrerr"'\1'"$reset"'/p' 1>&2
  # cleanup
  rm -f -- "$esprjtmp" "$esprjraw"
@@ -421,7 +419,6 @@ fi
 padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
 
 # effect potential 'columns' over-ride from config or reg file
-# no busybox # printf -v bgpoly "%-${columns}s" ' '
 bgpoly="$( printf "%-${columns}s" )"
 bgline="$clrbg$bgpoly"
 
@@ -495,6 +492,7 @@ diffproc(){
  case "$dpret" in
   0) padline "$clrtxt" " $fname" >> "$samefile" ;;
   1)
+   echo dwidth $dwidth dpos $dpos result "$result" > temp.tst
    padline "$clrsmd" " $fname" >> "$changefile"
    espr="$reportdir"'/report_'"$fname"'.espdif'
    if [ -d "$sourcefile" ]; then
@@ -504,9 +502,10 @@ diffproc(){
     #printf '%s' "$result" > tmpfoldif
    else
     printf '%s' "$result" |
-     iconv -f utf-8 -t ascii -c |
-      grep -nEC"$context" -- '^.{'"$dpos"'}[<>|].*' |
-       tfixdif > "$espr"
+     iconv -f utf-8 -t ascii -c | # strip out unicode
+      tr -cd '\11\12\15\40-\176' | # pass ascii tab, lf, cr, printable (octal)
+       grep -nEC"$context" -- '^.{'"$dpos"'}[<>|].*' |
+        tfixdif > "$espr"
    fi
   ;;
   2) padline "$clrmsf$clrbg" "$result" >> "$errorfile"'_' ;;
@@ -638,7 +637,7 @@ mainloop(){
 
 
 ##  change terminal window title, assume $PS1 resets this
-printf '%s' "$titlepre$titletxt$terminator"
+printf '%s' "$titlepre$titletxt$bell"
 
 ##  pre-formatting
 even=$(( columns % 2 )) # adjust for odd number of columns
@@ -764,9 +763,6 @@ elif  [ "$mode" = 'term' ]; then
  cat -- "$reportdir"/*
  printf '%s\n\n' "$reset"
 fi
-
-# cleanup
-# rm -r -- "$reportdir"
 
 exit
 
