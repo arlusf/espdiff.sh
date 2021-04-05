@@ -484,7 +484,6 @@ diffproc(){
  case "$dpret" in
   0) padline "$clrtxt" " $fname" >> "$samefile" ;;
   1)
-   echo dwidth $dwidth dpos $dpos result "$result" > temp.tst
    padline "$clrsmd" " $fname" >> "$changefile"
    espr="$reportdir"'/report_'"$fname"'.espdif'
    if [ -d "$sourcefile" ]; then
@@ -824,7 +823,7 @@ exit
 #    ${ substring expansion variable : offset parameter : -length is negative }
 #      in Bash since 4.2-alpha, busybox?
 
-##  troubleshooting, theory of operation
+##  troubleshooting & theory of operation
 #
 #   $dpos is exact offset to the middle column in side-by-side diff output
 #   this is expected to be standard for any implemented diff
