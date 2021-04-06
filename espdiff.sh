@@ -1,17 +1,17 @@
 #!/bin/bash
 #!/home/busybox/busybox-1.32.1/busybox sh
 
-# Copyright April 1st, 2021 arlusf@github, all rights reserved
+# Copyright (c) April 5th, 2021 arlusf@github, all rights reserved
 # this version does not offer any license agreement
 # no warranty is expressed, provided or implied
 name='  espdiff.sh  version 5.0'
-# deploys clairvoyance(tm) 6.0 incursively, to read diff intent
+# deploys clairvoyance(tm) 6 incursive engine to read diff intent
 # tested with xterm, lxterminal, rxvt, screen, tmux
 # 256color and 24bit direct-color support
 # ECMA-48 conformance
 
 ##  help
-#	
+#
 #      >$  ./espdiff.sh help
 
 ##  install
@@ -27,7 +27,7 @@ name='  espdiff.sh  version 5.0'
 
 ###  general options
 ## locate configfile in a secure area
-readonly configfile="$HOME"'/.local/.espdiffrc' # one seat license
+readonly configfile="$HOME"'/.local/.espdiffrc'
  # configfile='/root/espdiff/.espdiffrc' # embedded devices
 readonly mdsum='12f747c66f2602751b7961e4c62eb616' # configfile
  # mdsum='unlocked' # disable md5 verification
@@ -36,7 +36,7 @@ sessiondir="$HOME"
 ## where to create report directory
 tmpdir='/tmp'
  # tmpdir='/run/user/1000' # systemd tmpfs, user owned
-## restriction on file and directory names
+## restriction on names in project registration file
 allowchars='a-zA-Z0-9/\_. -' # literal dash - last
 
 ###  format options
@@ -61,7 +61,7 @@ $name
 #    side by side + line numbers + 256 & 24-bit color + multi-process
 #    numbering up to 9999 is presented in the middle column
 #    the line number of missing lines reflects those of the target file
-#    additions and context lines are to the right 
+#    additions and context lines are to the right
 #    deletions are on the left hand side
 #    sub-folder contents are briefly evaluated
 $edhelp
@@ -102,7 +102,10 @@ $edhelp
 ##  to view the current register, invoke espdiff.sh with  ' make '
 #
 #    registration files are sanitized for allowed and correct sequences
+#    path and color names are restricted to the following characters:
+#      '$allowchars'
 #    any lines not accepted are sent to stderr
+#
 #    sample format:
 #     (paths are required to register a project)
 #
@@ -113,9 +116,6 @@ $edhelp
 #    projectdir is path to the project base folder
 #    sourcedir and targetdir are relative to projectdir
 #
-#    file, path and color names are restricted to the following characters:
-#      '$allowchars'
-#
 #    lines and columns format over-ride is permitted
 #      columns='$columns'
 #      lines='$lines'
@@ -124,9 +124,9 @@ $edhelp
 #    ' register '  project file in  ' path( name ) '  as session project" |
 less
 exit
-}   
+}
 
-# multi-byte characters are not displayed, but will report as different if so
+# variable-width characters are not displayed, but will report as different if so
 # this is a performant convenience, to maintain expected column alignment
 
 ##  core performance test
@@ -159,30 +159,30 @@ testdirect='false'
 #
 
 ##  terminal control sequences
-# C0 code bytes
+# C0 code bytes (7-bit, 0-127)
 escape=$'\033' # ^ ascii escape key-code
 bell=$'\007' # BEL
 st=$escape'\\' # ST is preferred
-# Operating System Command  OSC Ps ; Pt BEL
-# OSC=^]  Ps=0 change icon name and window title  ;  Pt=text  (BEL or ST \e\\)
+# Operating System Command  OSC Ps ; Pt BEL (xterm)
+# OSC=^]  Ps=0 change icon name and window title  ;  Pt=text  BEL or ST (\e\\)
 titlepre=$escape']0;' # OSC  + change window title
 titletxt='espdiff.sh' # Pt
-bold=$escape'[1m'
+# CSI - Control Sequence Introducer ^[
+bold=$escape'[1m' # m is final character for CSI
 reset=$escape'[0m'
 normal=$escape'[22m' # not bold, not faint
 reverse=$escape'[7m'
-# CSI - Control Sequence Introducer ^[
 esc=$escape'[38;5;' # CSI + set foreground indexed-color
 fdc=$escape'[38;2;' # foreground direct-color sequence
-# relict form: '\e[38:2::R:G:Bm' ( future use... color-space, tolerance )
-# color-space is to be specified within the consecutive double colon syntax 
+# relict form: '\e[38:2::R:G:Bm' (future use... color-space, tolerance)
+# color-space is to be specified within the consecutive double colon syntax
 # (ITU-T Recommendation T.416, aka ISO/IEC 8613-6)
 bdc=$escape'[48;2;' # background direct-color
 bkg=$escape'[48;5;' # background 256color
 # default colors, 256color index
 # 'mod' (modifier) is one of the diff symbols:  <|>
 clrbg=$bkg'235m';   typ_clrbg='background color'
-clrbrf=$esc'103m';  typ_clrbrf='brief section header' 
+clrbrf=$esc'103m';  typ_clrbrf='brief section header'
 clrerr=$esc'124m';  typ_clrerr='error'
 clrmsf=$esc'172m';  typ_clrmsf='missing file'
 clrsmd=$esc'185m';  typ_clrsmd='changed to line'
@@ -264,11 +264,11 @@ $bgline
   : "${nam:='unnamed'}"
   eval "typ=\$$typ"
   if [ "$1" = 'gen' ]; then
-   [ "$color" = 'clrbg' ] && fgc='' || fgc=$colr 
+   [ "$color" = 'clrbg' ] && fgc='' || fgc=$colr
    instr "$key" '$fdc $bdc' &&
     printf '%snam_%s\n' "$fgc" "$color='$nam'" &&
      nam="user custom"
-   color="$color=$key'${colr#*[25];}'" 
+   color="$color=$key'${colr#*[25];}'"
    printf '%s%-27s# %-24s%s\n' "$fgc" "$color" "$nam" "$typ$clrbg"
   else # 'show'
    [ "$color" = 'clrbg' ] && continue
@@ -290,10 +290,10 @@ sanitize(){
  regx="$regx|((titletxt|nam_clr($scolor))='[$allowchars]{3,25}')"
  num='[0-9]{1,3}'
  cdirect="$num"'[;:]'"$num"'[;:]'
- regx="$regx|(clr($scolor)=[$](esc'|bkg'|([fb]dc)'$cdirect)${num}m'))"
+ regx="$regx|(clr($scolor)=[$](esc'|bkg'|([fb]dc)'$cdirect)${num}m'))" # m
  esprjtmp="$esprj"'tmp'
  esprjraw="$esprj"'raw'
- seqrx="$escape"'[^m]*m' # m is CSI end char
+ seqrx="$escape"'[^m]*m' # m is CSI final char
  if [ "$1" ]; then
   regfile="$1"
   absolute="$currentdir/${1%/*}"
@@ -312,7 +312,7 @@ sanitize(){
     # escape forward slashes in path
     # (do not restrict use of any arbitrary path/filename char to delimit sed)
     absolute="${absolute//\//\\/}"'\/'
-    # fix relative projectdir in session registration file 
+    # fix relative projectdir in session registration file
     fixrel="s/(projectdir=')([^/][^']*')/\1"
     sed -r -- "$fixrel$absolute"'\2/;Te;i# fixed relative projectdir
 :e'; } > "$esprj"
@@ -337,18 +337,18 @@ case "$1" in
    else
     sum="$( md5sum -- "$configfile" )"
     sum="${sum%% *}"
-   fi 
+   fi
    if [ "$sum" = "$mdsum" ]; then
     printf 'using %s %s\n' "$configfile" "$lock"
     . "$configfile"
    else
     printf '%sconfigfile checksum unverified%s\n' "$clrerr" "$reset" 1>&2
    fi
-  fi 
+  fi
  ;;
 esac
 
-instr(){ # return true if $1 is a substring of $2, 0=true, !0=false 
+instr(){ # return true if $1 is a substring of $2, 0=true, !0=false
  strin="${2/"$1"}"; [ "${#strin}" -ne "${#2}" ] && return 0 || return 1; }
 
 fixup(){ [ "${1: -1}" = '/' ] && echo "$1" || echo "$1"'/'; }
@@ -493,7 +493,7 @@ diffproc(){
     #printf '%s' "$result" > tmpfoldif
    else
     printf '%s' "$result" |
-     iconv -f utf-8 -t ascii -c | # strip out unicode
+     iconv -f utf-8 -t ascii -c | # strip out variable width unicode chars
       tr -cd '\11\12\15\40-\176' | # pass ascii tab, lf, cr, printable (octal)
        grep -nEC"$context" -- '^.{'"$dpos"'}[<>|].*' |
         tfixdif > "$espr"
@@ -527,7 +527,7 @@ tfixdif(){
    # split line in two
    left="${fline:$num+1:$dpos-1}"
    right="${fline:$num+1+$dpos}"
-   if [ "$type" = ':' ]; then 
+   if [ "$type" = ':' ]; then
    # added, deleted and changed lines
     mod="${right::1}";
     # format as appropriate to diff symbol ('mod')
@@ -560,11 +560,11 @@ tfixdif(){
    right="$right${dplace:$newlen}$newnum$clrtxt$type"
    printf '%s %s\n' "$right" "$left"
   fi
- done 
+ done
  # summary
  # justification - left (align with target text), right \n center
  # ' 1 lines' pattern match requires a space after =" (next three lines)
- [ "$cmpoff" ] && cmpoff=" $cmpoff lines added  " 
+ [ "$cmpoff" ] && cmpoff=" $cmpoff lines added  "
  [ "$modline" ] && modline=" $modline lines modified  "
  [ "$srcoff" ] && srcoff=" $srcoff lines removed"
  summary="$cmpoff$modline$srcoff"
@@ -595,7 +595,7 @@ supreport(){
     s/^>(.*) /'"$clrtgt"' <'"$clrmsf"'\1/p' |
     sort -r --  )"
  # write supplemental report data to stdout
- [ -n "$mdiff" ] && 
+ [ -n "$mdiff" ] &&
   padline "$bgpoly
 $clrbrf" 'Missing' "
 $mdiff"
@@ -677,7 +677,7 @@ wait # for report sub-processes to finish
 
 
 finish(){
- # fill bottom of file given with lines of spaces, minus offset argument 
+ # fill bottom of file given with lines of spaces, minus offset argument
  flines="$(wc -l -- "$1")"
  flines="${flines%% *}"
  # can be called with $2 offset omitted
@@ -715,7 +715,7 @@ do
  [ -f "$final" ] && { # skip loop if no reports
   tfx="$final"'_tfx'
   tail -n 3 -- "$final" | {
-   IFS=''; read -r line; read -r swap 
+   IFS=''; read -r line; read -r swap
    instr "$foldif" "$line" ||
     printf '%s\n%s\n%s\n%s\n' "$bgline" "$swap" "$line" "$bgpoly" > "$tfx"
   }
@@ -750,7 +750,7 @@ elif  [ "$mode" = 'one' ]; then
  # all reports in one, less
  cat -- "$reportdir"/* | less -rc --
 elif  [ "$mode" = 'term' ]; then
- # no less 
+ # no less
  cat -- "$reportdir"/*
  printf '%s\n\n' "$reset"
 fi
@@ -819,7 +819,7 @@ exit
 #    B) displays 'qwe'
 #    a='asdfqwerty'; echo ${a:4:-3}
 #      error:
-#      sh: Illegal number: -3 
+#      sh: Illegal number: -3
 #    ${ substring expansion variable : offset parameter : -length is negative }
 #      in Bash since 4.2-alpha, busybox?
 
@@ -829,5 +829,7 @@ exit
 #   this is expected to be standard for any implemented diff
 #   using $dpos, grep provides line numbers, discarding unselected context
 #   the line is then split in half, colorized and reassembled
+
+# 'clairvoyance 6' and 'incursive engine' are trademarks of espdiff.sh
 
 ###EOF###
