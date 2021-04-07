@@ -51,7 +51,7 @@ found(){ [ -f "$1" ] && echo 'exists' || echo 'not found'; }
 edhelp="
 ##  usage:
 #  espdiff.sh ( man ) ( page | keep | term )  file ( file2 )  |  dir1  dir2
-#-   man   - read the manual, arguments are optional
+#-   man    - read the manual, arguments are optional
 "
 edman(){
 echo "
@@ -76,15 +76,18 @@ $edhelp
 #   file argument:
 #~   file   - compare the specified project file, or  ' ? '  list project files
 #
+#   dir argument:
+#~   dir    - compare the specified project folder
+#
 #   extra-project file arguments:
 #~   file  file2   - compare file with file2
 #
 #   extra-project directory arguments:
-#~   dir1  dir2   - compare files in dir1 with dir2
+#~   dir1  dir2    - compare files in dir1 with dir2
 
 
 ##  resource configuration file over-rides hard-coded definitions
-#-   skip  - ignore resource file - given before any other arguments
+#-   skip   - ignore resource file - given before any other arguments
 #    this file is not sanitized, use with care, md5 verified
 #
 #      $configfile  $(found "$configfile")
@@ -159,40 +162,40 @@ testdirect='false'
 #
 
 ##  terminal control sequences
-# C0 code bytes (7-bit, 0-127)
-escape=$'\033' # ^ ascii escape key-code
+# C0 code bytes (7-bit, 0-127, control 0-31)
+esc=$'\033' # 27 0x1b ascii escape key-code ^[
+csi="$esc"'[' # CSI - Control Sequence Introducer
+st=$esc'\' # ST
 bell=$'\007' # BEL
-st=$escape'\\' # ST is preferred
 # Operating System Command  OSC Ps ; Pt BEL (xterm)
-# OSC=^]  Ps=0 change icon name and window title  ;  Pt=text  BEL or ST (\e\\)
-titlepre=$escape']0;' # OSC  + change window title
+# Ps=0 change icon name and window title ; Pt=text  BEL or ST (\e\\)
+titlepre=$esc']0;' # OSC + change window title
 titletxt='espdiff.sh' # Pt
-# CSI - Control Sequence Introducer ^[
-bold=$escape'[1m' # m is final character for CSI
-reset=$escape'[0m'
-normal=$escape'[22m' # not bold, not faint
-reverse=$escape'[7m'
-esc=$escape'[38;5;' # CSI + set foreground indexed-color
-fdc=$escape'[38;2;' # foreground direct-color sequence
+bold=$csi'1m' # m is final character for CSI
+reset=$csi'0m'
+normal=$csi'22m' # not bold, not faint
+reverse=$csi'7m'
+fgc=$csi'38;5;' # CSI + set foreground indexed-color
+fdc=$csi'38;2;' # foreground direct-color sequence
 # relict form: '\e[38:2::R:G:Bm' (future use... color-space, tolerance)
 # color-space is to be specified within the consecutive double colon syntax
 # (ITU-T Recommendation T.416, aka ISO/IEC 8613-6)
-bdc=$escape'[48;2;' # background direct-color
-bkg=$escape'[48;5;' # background 256color
+bdc=$csi'48;2;' # background direct-color
+bkg=$csi'48;5;' # background 256color
 # default colors, 256color index
 # 'mod' (modifier) is one of the diff symbols:  <|>
 clrbg=$bkg'235m';   typ_clrbg='background color'
-clrbrf=$esc'103m';  typ_clrbrf='brief section header'
-clrerr=$esc'124m';  typ_clrerr='error'
-clrmsf=$esc'172m';  typ_clrmsf='missing file'
-clrsmd=$esc'185m';  typ_clrsmd='changed to line'
-clrtmd=$esc'186m';  typ_clrtmd='changed from line and mod'
-clrnew=$esc'159m';  typ_clrnew='added line'
-clrrmv=$esc'101m';  typ_clrrmv='removed text'
-clrtxt=$esc'188m';  typ_clrtxt='context line, separator and type'
-clrsrc=$esc'108m';  typ_clrsrc='source line-number and mod, new file'
-clrtgt=$esc'130m';  typ_clrtgt='target line-number and mod'
-clrttl=$esc'195m';  typ_clrttl="header ($bold bold $normal)"
+clrbrf=$fgc'103m';  typ_clrbrf='brief section header'
+clrerr=$fgc'124m';  typ_clrerr='error'
+clrmsf=$fgc'172m';  typ_clrmsf='missing file'
+clrsmd=$fgc'185m';  typ_clrsmd='changed to line'
+clrtmd=$fgc'186m';  typ_clrtmd='changed from line and mod'
+clrnew=$fgc'159m';  typ_clrnew='added line'
+clrrmv=$fgc'101m';  typ_clrrmv='removed text'
+clrtxt=$fgc'188m';  typ_clrtxt='context line, separator and type'
+clrsrc=$fgc'108m';  typ_clrsrc='source line-number and mod, new file'
+clrtgt=$fgc'130m';  typ_clrtgt='target line-number and mod'
+clrttl=$fgc'195m';  typ_clrttl="header ($bold bold $normal)"
 clrdcs=$fdc'128;128;128m'
 typ_clrdcs='24bit direct-color sample'
 nam_clrdcs='darker gray' # 24bit color names are user specified
@@ -249,11 +252,11 @@ $bgline
   nam='nam_'"$color"
   eval "colr=\$$color"
   cidx="${colr:7: -1}"
-  if [ "${colr::${#esc}}" = "$esc" ]; then
-   # $colr begins with $esc
-   key='$esc'
+  if [ "${colr::${#fgc}}" = "$fgc" ]; then
+   # $colr begins with '$fgc'
+   key='$fgc'
    eval "nam=\"\$xnam$cidx\""
-   # $esc and $bkg sequences use configured names
+   # $fgc and $bkg sequences use configured names
   elif [ "${colr::${#bkg}}" = "$bkg" ]; then
    key='$bkg'
    eval "nam=\"\$xnam$cidx\""
@@ -264,12 +267,12 @@ $bgline
   : "${nam:='unnamed'}"
   eval "typ=\$$typ"
   if [ "$1" = 'gen' ]; then
-   [ "$color" = 'clrbg' ] && fgc='' || fgc=$colr
+   [ "$color" = 'clrbg' ] && fcol='' || fcol=$colr
    instr "$key" '$fdc $bdc' &&
-    printf '%snam_%s\n' "$fgc" "$color='$nam'" &&
+    printf '%snam_%s\n' "$fcol" "$color='$nam'" &&
      nam="user custom"
    color="$color=$key'${colr#*[25];}'"
-   printf '%s%-27s# %-24s%s\n' "$fgc" "$color" "$nam" "$typ$clrbg"
+   printf '%s%-27s# %-24s%s\n' "$fcol" "$color" "$nam" "$typ$clrbg"
   else # 'show'
    [ "$color" = 'clrbg' ] && continue
    padline "$clrbg$colr" "'$nam'   $typ" "$sample"
@@ -290,10 +293,10 @@ sanitize(){
  regx="$regx|((titletxt|nam_clr($scolor))='[$allowchars]{3,25}')"
  num='[0-9]{1,3}'
  cdirect="$num"'[;:]'"$num"'[;:]'
- regx="$regx|(clr($scolor)=[$](esc'|bkg'|([fb]dc)'$cdirect)${num}m'))" # m
+ regx="$regx|(clr($scolor)=[$](fgc'|bkg'|([fb]dc)'$cdirect)${num}m'))" # m
  esprjtmp="$esprj"'tmp'
  esprjraw="$esprj"'raw'
- seqrx="$escape"'[^m]*m' # m is CSI final char
+ seqrx="$csi"'[^m]*m' # m is CSI final char
  if [ "$1" ]; then
   regfile="$1"
   absolute="$currentdir/${1%/*}"
@@ -397,7 +400,7 @@ else
  fi
 fi
 if [ "$prloc" != 'default' ]; then
- if instr "$prloc" 'local parent'; then
+ if [ "$prloc" != 'session' ]; then
   if [ '.esprj' -ef "$esprj" ]; then
    prloc='self' # sessiondir is same location as '.esprj file
   else
@@ -441,7 +444,7 @@ if [ -n "$2" ]; then # extra-project diff
   exit
  fi
 elif [ -n "$1" ]; then  # compare one project file
- state='single'; glob=''
+ state='single'
 fi
 
 # validate inputs
@@ -460,8 +463,12 @@ if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
   echo "$prloc"' registration' # hard-coded
  if [ "$state" = 'single' ]; then
   sproj="$projectdir$sourcedir$1"
-  if [ -f "$sproj" ]; then
+  if [ -d "$projectdir$1" ]; then # compare specified project folder
+   targetdir="$( fixup "$1" )"
+   state='default'
+  elif [ -f "$sproj" ]; then # compare one project file
    sourcedir="$sourcedir$1"
+   glob=''
   else
    [ '?' != "$1" ] && help="or 'help'" &&
     notfile='not a project file: '"$clrerr$sproj$reset"
@@ -592,8 +599,8 @@ supreport(){
    padline '' "$missing"
    done; } |
    sed -nr -- 's/^<(.*) /'"$clrsrc"'>'"$clrmsf"'\1 /p
-    s/^>(.*) /'"$clrtgt"' <'"$clrmsf"'\1/p' |
-    sort -r --  )"
+    s/^>(.*) /'"$bell$clrtgt"' <'"$clrmsf"'\1/p' |
+    sort -n --  )" # bell sorts first
  # write supplemental report data to stdout
  [ -n "$mdiff" ] &&
   padline "$bgpoly
@@ -602,7 +609,6 @@ $mdiff"
  # cleanup
  rm -f -- "$supsrc" "$suptgt"
 }
-
 
 mainloop(){
  # queue files for diff comparison, govern spawn limit
