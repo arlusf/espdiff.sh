@@ -73,7 +73,7 @@
 
   less
     fast - files do not have to load completely before display begins
-    caveat: no line color buffer for hidden lines
+    caveat: no color buffer for hidden lines
     (scroll-back coloring is reversed)
 
   strategies for consistent background color  
