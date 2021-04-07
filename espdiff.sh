@@ -16,7 +16,7 @@ name='  espdiff.sh  version 5.0'
 
 ##  install
 #    project:  configuration file, registration file or hard-coded
-#    shell:    move bash shebang to first line as required
+#    shell:    move busybox shebang to first line as required
 #    options:  confirm general options below
 
 ###  hard-coded
@@ -50,8 +50,8 @@ columns="${columns#* }"
 found(){ [ -f "$1" ] && echo 'exists' || echo 'not found'; }
 edhelp="
 ##  usage:
-#  espdiff.sh ( man ) ( page | keep | term )  file ( file2 )  |  dir1  dir2
-#-   man    - read the manual, arguments are optional
+#    espdiff.sh ( man ) ( page | keep | term )  file ( file2 )  |  dir1  dir2
+#    man  - read the manual, arguments are optional
 "
 edman(){
 echo "
@@ -66,28 +66,28 @@ $name
 #    sub-folder contents are briefly evaluated
 $edhelp
 ##  display-mode argument: file or directory arguments may follow
-#   (when not specified)  all reports display in one page with less
-#-   page   - navigate each report separately with less  ( :n  :p  :x  = )
-#-   keep   - write report files to current or project folder, no display
-#-   term   - output to terminal
+#    (when not specified)  all reports display in one page with less
+#   page  - navigate each report separately with less  ( :n  :p  :x  = )
+#   keep  - write report files to current or project folder, no display
+#   term  - output to terminal
 
-##  file and directory arguments are stand-alone, or subject to display mode
+##  file and directory arguments are stand-alone or subject to display mode
 #
 #   file argument:
-#~   file   - compare the specified project file, or  ' ? '  list project files
+#   file  ~ compare the specified project file, or  ' ? '  list project files
 #
 #   dir argument:
-#~   dir    - compare the specified project folder
+#   dir   ~ compare the specified project folder
 #
 #   extra-project file arguments:
-#~   file  file2   - compare file with file2
+#   file  file2  ~ compare file with file2
 #
 #   extra-project directory arguments:
-#~   dir1  dir2    - compare files in dir1 with dir2
+#   dir1  dir2  ~ compare files in dir1 with dir2
 
 
 ##  resource configuration file over-rides hard-coded definitions
-#-   skip   - ignore resource file - given before any other arguments
+#   skip  - ignore resource file - given before any other arguments
 #    this file is not sanitized, use with care, md5 verified
 #
 #      $configfile  $(found "$configfile")
@@ -164,13 +164,13 @@ testdirect='false'
 ##  terminal control sequences
 # C0 code bytes (7-bit, 0-127, control 0-31)
 esc=$'\033' # 27 0x1b ascii escape key-code ^[
-csi="$esc"'[' # CSI - Control Sequence Introducer
 st=$esc'\' # ST
 bell=$'\007' # BEL
-# Operating System Command  OSC Ps ; Pt BEL (xterm)
+osc=$esc']' # Operating System Command  OSC Ps ; Pt BEL (xterm)
 # Ps=0 change icon name and window title ; Pt=text  BEL or ST (\e\\)
-titlepre=$esc']0;' # OSC + change window title
+titlepre=$osc'0;' # OSC + change window title
 titletxt='espdiff.sh' # Pt
+csi="$esc"'[' # CSI - Control Sequence Introducer
 bold=$csi'1m' # m is final character for CSI
 reset=$csi'0m'
 normal=$csi'22m' # not bold, not faint
@@ -244,6 +244,7 @@ $bgline
  fi
  if [ -n "$xnam" ]; then # 256color names from configuration file
   x=-1; IFS=','; for b in $xnam; do eval "xnam$(( x += 1 ))=$b"; done
+  #! eval can be dangerous... but so is ${!var}
  fi
  IFS=\|
  for color in $colors; do
@@ -782,7 +783,7 @@ exit
 
 ##  less
 #    fast - files do not have to load completely before display begins
-#    caveat: no line color buffer for hidden lines
+#    caveat: no color buffer for hidden lines
 #    (scroll-back coloring is reversed)
 
 ##  strategies for consistent background color
@@ -790,7 +791,6 @@ exit
 #    pad each line with spaces to edge of screen, or
 #    'yellow background\033[43m home\033[H erase\033[J' or
 #    '\e[K' at start of each line, then erase to bottom of screen
-#    caution: CSI K at exactly the end of a line can delete its last character
 #    not every terminal control-sequence code enjoys broad support
 #    even so, actual rendering may not be equivalent
 
@@ -820,7 +820,7 @@ exit
 #
 #    A) displays 'one' after 1 second duration
 #    sleep 3 && echo three & sleep 1 & wait -n; echo one
-#      wrong: displays 'one' immediately
+#      fail: displays 'one' immediately
 #
 #    B) displays 'qwe'
 #    a='asdfqwerty'; echo ${a:4:-3}
