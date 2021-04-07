@@ -2,6 +2,9 @@
 
 **A contemporary take on diff, the terminal control sequence and shell scripting in color**
 - documentation is built into the script file, including a footnote
+- tested with xterm, lxterminal, rxvt, screen, tmux
+- 256color and 24bit direct-color support
+- ECMA-48 conformance
 
 ## getting started
 
@@ -78,7 +81,6 @@
     pad each line with spaces to edge of screen, or
     'yellow background\033[43m home\033[H erase\033[J' or
     '\e[K' at start of each line, then erase to bottom of screen
-    caution: CSI K at exactly the end of a line can delete its last character
     not every terminal control-sequence code enjoys broad support
     even so, actual rendering may not be equivalent
 
