@@ -51,8 +51,6 @@
 ![](screenshots/colors.png)
 
 
-###### screenshot font is IBM Plex Mono Text
-
 ```
   footnote
 
@@ -126,3 +124,6 @@
    using offset, grep provides line numbers, discarding unselected context
    line is then split in half, colorized and reassembled
 ```
+
+
+###### screenshot font is IBM Plex Mono Text
