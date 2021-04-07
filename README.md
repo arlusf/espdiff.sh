@@ -5,6 +5,15 @@
 - tested with xterm, lxterminal, rxvt, screen, tmux
 - 256color and 24bit direct-color support
 - ECMA-48 conformance
+- side-by-side human oriented output
+- visually assess progress on small projects and changes in files or directories
+- persistently remembers the most recent project registration
+
+need to know if it is time to wrap things up and backup an interim version?
+
+something amiss? quickly see which file contains spurious punctuation
+
+operate in situ on limited or restricted resource systems
 
 ## getting started
 
