@@ -7,11 +7,11 @@
 
 **extract example tarball:**
 
-tar -xf example.tar
+`tar -xf example.tar`
 
 **test basic function:**
 
-bash espdiff.sh example/previous/version-2/fileA example/previous/version-1/fileA
+`bash espdiff.sh example/previous/version-2/fileA example/previous/version-1/fileA`
 
 
 [![](screenshots/example.jpg)](screenshots/example.png)
@@ -19,9 +19,9 @@ bash espdiff.sh example/previous/version-2/fileA example/previous/version-1/file
 
 **make script executable:**
 
-chmod u+x espdiff.sh
+`chmod u+x espdiff.sh`
 
-./espdiff.sh
+`./espdiff.sh`
 
 
 [![](screenshots/example2.jpg)](screenshots/example2.png)
@@ -29,15 +29,15 @@ chmod u+x espdiff.sh
 
 **to include color name index:**
 
-cp .espdiffrc ~/.local/
+`cp .espdiffrc ~/.local/`
 
 **if terminal supports 24-bit direct-color:**
 
-echo "testdirect='true'" >> .esprj
+`echo "testdirect='true'" >> .esprj`
 
 **view the register:**
 
-./espdiff.sh make
+`./espdiff.sh make`
 
 
 [![](screenshots/make.esprj.jpg)](screenshots/make.esprj.png)
@@ -45,10 +45,84 @@ echo "testdirect='true'" >> .esprj
 
 **color swatch and ramp:**
 
-./espdiff.sh colors
+`./espdiff.sh colors`
 
 
 ![](screenshots/colors.png)
 
 
 ###### screenshot font is IBM Plex Mono Text
+
+```
+  footnote
+
+  xterm
+    TERM='xterm-256color'
+    menus C-left/right mouse
+
+  tmux
+    TERM='screen-256color' or 'tmux-256color'
+    scrollback C-b [
+
+  screen
+    24bit direct-color in master branch (at least since 4.99)
+    TERM='screen-256color'
+    bce is not enabled by default
+    C-a : bce on, or insert 'bce on' line into screenrc file
+
+  less
+    fast - files do not have to load completely before display begins
+    caveat: no line color buffer for hidden lines
+    (scroll-back coloring is reversed)
+
+  strategies for consistent background color  
+    print to each cell of window text area then over-writing, or    
+    pad each line with spaces to edge of screen, or
+    'yellow background\033[43m home\033[H erase\033[J' or
+    '\e[K' at start of each line, then erase to bottom of screen
+    caution: CSI K at exactly the end of a line can delete its last character
+    not every terminal control-sequence code enjoys broad support
+    even so, actual rendering may not be equivalent
+
+  256color index
+    lookup tables shipped onboard a vga graphics card eprom
+    rgb levels were originally preconfigured to suit crt display hardware
+    variation today can result from algorithm discrepancy or preference
+   0-7 first 8 - ANSI color names, linux kernel system palette
+    color selection was limited to this range initially
+   8-15 next 8 - bright versions of first 8 colors, or may be bold font
+    terminal themes are implemented in the first sixteen colors
+   16-231 color cube - six intensity levels for  r, g, b  coordinates
+    decimal  0, 95, 135, 175, 215, 255  (00, 5f, 87, af, d7, ff hex)
+   232-255 greyscale - 24 shades,  8+(10*shade)
+    8, 8, 8  -  238, 238, 238
+
+  busybox
+    if busybox is the default system shell:
+     change shebang to !/bin/sh
+     install iconv and full versions of builtins diff, less
+    distribution binary does not pass unit tests A or B:
+     compile busybox-1.32.1 (latest stable)
+      make defconfig
+      make menuconfig - add or remove functionality/builtins*
+      make
+
+  unit tests - first line describes correct result
+
+    A) displays 'one' after 1 second duration
+    sleep 3 && echo three & sleep 1 & wait -n; echo one
+      wrong: displays 'one' immediately
+
+    B) displays 'qwe'
+    a='asdfqwerty'; echo ${a:4:-3}
+      error:
+      sh: Illegal number: -3
+    ${ substring expansion variable : offset parameter : -length is negative }
+      in Bash since 4.2-alpha, busybox?
+
+  troubleshooting & theory of operation
+   determine exact offset to the middle column in side-by-side diff output
+   this is expected to be standard for any implemented diff
+   using offset, grep provides line numbers, discarding unselected context
+   line is then split in half, colorized and reassembled
+```
