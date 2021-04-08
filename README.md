@@ -1,19 +1,23 @@
 # espdiff.sh
 
 **A contemporary take on diff, the terminal control sequence and shell scripting in color**
-- documentation is built into the script file, including a footnote
+
+need to know when it's time to wrap it up and archive an interim version?
+
+operate in situ on limited resource systems or within restricted environments
+
+something amiss? quickly see which file contains spurious punctuation
+
+
+- visually assess progress on small projects and changes in files or directories
+- persistently remembers the most recent project registration
+- each project vantage may specify a custom palette
+
 - tested with xterm, lxterminal, rxvt, screen, tmux
 - 256color and 24bit direct-color support
 - ECMA-48 conformance
 - side-by-side human oriented output
-- visually assess progress on small projects and changes in files or directories
-- operate in situ on limited resource systems or within restricted environments
-- persistently remembers the most recent project registration
-- each project vantage may specify a custom palette
-
-need to know when it's time to wrap it up and archive an interim version?
-
-something amiss? quickly see which file contains spurious punctuation
+- documentation is built into the script file, including a footnote
 
 
 ## getting started
