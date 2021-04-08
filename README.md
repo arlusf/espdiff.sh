@@ -2,9 +2,9 @@
 
 **A contemporary take on diff, the terminal control sequence and shell scripting in color**
 
-need to know when it's time to wrap it up and archive an interim version?
+operate in situ on limited resource systems or within restrictive environments
 
-operate in situ on limited resource systems or within restricted environments
+need to know when it's time to wrap it up and archive an interim version?
 
 something amiss? quickly see which file contains spurious punctuation
 
