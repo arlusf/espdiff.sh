@@ -92,14 +92,6 @@ simply want to check whether your terminal supports 24bit direct-color?
     caveat: no color buffer for hidden lines
     (scroll-back coloring is reversed)
 
-  strategies for consistent background color  
-    print to each cell of window text area then over-writing, or    
-    pad each line with spaces to edge of screen, or
-    'yellow background\033[43m home\033[H erase\033[J' or
-    '\e[K' at start of each line, then erase to bottom of screen
-    not every terminal control-sequence code enjoys broad support
-    even so, actual rendering may not be equivalent
-
   256color index
     lookup tables shipped onboard a vga graphics card eprom
     rgb levels were originally preconfigured to suit crt display hardware
