@@ -8,6 +8,8 @@ need to know when it's time to wrap it up and archive an interim version?
 
 something amiss? quickly see which file contains spurious punctuation
 
+simply want to check whether your terminal supports 24bit direct-color?
+
 - project-based and standalone modality
 - visually assess progress on small projects or changes in files and directories
 - persistently remembers the most recent project registration
