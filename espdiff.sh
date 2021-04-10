@@ -69,9 +69,9 @@ $edhelp
 #    (when not specified)  all reports display in one page with less
 #   page  - navigate each report separately with less  ( :n  :p  :x  = )
 #   keep  - write report files to current or project folder, no display
-#   term  - output to terminal
+#   term  - standard output to terminal
 
-##  file and directory arguments are stand-alone or subject to display mode
+##  file and directory arguments are solitary or subject to display mode
 #
 #   file argument:
 #   file  ~ compare the specified project file, or  ' ? '  list project files
@@ -129,8 +129,8 @@ less
 exit
 }
 
-# variable-width characters are not displayed, but will report as different if so
-# this is a performant convenience, to maintain expected column alignment
+## utf-8
+#   variable width characters are translated to '?'
 
 ##  core performance test
 #    project reports are parsed but not displayed
@@ -177,24 +177,24 @@ normal=$csi'22m' # not bold, not faint
 reverse=$csi'7m'
 fgc=$csi'38;5;' # CSI + set foreground indexed-color
 fdc=$csi'38;2;' # foreground direct-color sequence
-# relict form: '\e[38:2::R:G:Bm' (future use... color-space, tolerance)
+# relict form: '\e[38:2::R:G:Bm' ITU-T Recommendation T.416, aka ISO/IEC 8613-6
 # color-space is to be specified within the consecutive double colon syntax
-# (ITU-T Recommendation T.416, aka ISO/IEC 8613-6)
+# (future use... color-space, tolerance, alpha?)
 bdc=$csi'48;2;' # background direct-color
 bkg=$csi'48;5;' # background 256color
 # default colors, 256color index
-# 'mod' (modifier) is one of the diff symbols:  <|>
+# 'gfmt' diff symbol  <|>
 clrbg=$bkg'235m';   typ_clrbg='background color'
 clrbrf=$fgc'103m';  typ_clrbrf='brief section header'
 clrerr=$fgc'124m';  typ_clrerr='error'
 clrmsf=$fgc'172m';  typ_clrmsf='missing file'
 clrsmd=$fgc'185m';  typ_clrsmd='changed to line'
-clrtmd=$fgc'186m';  typ_clrtmd='changed from line and mod'
+clrtmd=$fgc'186m';  typ_clrtmd='changed from line and gfmt'
 clrnew=$fgc'159m';  typ_clrnew='added line'
 clrrmv=$fgc'101m';  typ_clrrmv='removed text'
 clrtxt=$fgc'188m';  typ_clrtxt='context line, separator and type'
-clrsrc=$fgc'108m';  typ_clrsrc='source line-number and mod, new file'
-clrtgt=$fgc'130m';  typ_clrtgt='target line-number and mod'
+clrsrc=$fgc'108m';  typ_clrsrc='source line-number and gfmt, new file'
+clrtgt=$fgc'130m';  typ_clrtgt='target line-number and gfmt'
 clrttl=$fgc'195m';  typ_clrttl="header ($bold bold $normal)"
 clrdcs=$fdc'128;128;128m'
 typ_clrdcs='24bit direct-color sample'
@@ -252,7 +252,7 @@ $bgline
   typ='typ_'"$color"
   nam='nam_'"$color"
   eval "colr=\$$color"
-  cidx="${colr:7: -1}"
+  cidx="${colr:7:-1}"
   if [ "${colr::${#fgc}}" = "$fgc" ]; then
    # $colr begins with '$fgc'
    key='$fgc'
@@ -308,17 +308,18 @@ sanitize(){
  fi
  # strip blank and comment lines along with any preceeding whitespace
  sed -r -- 's/'"$seqrx"'//g;/^\s*(#.*)?$/d' "$regfile" |
-  tee -- "$esprjtmp" |
-   # filter sequences with correct option=value, once per line
-   # insert blank line if $regx does not match
-   sed -rn -- 's/.*'"$regx"'.*/\1/p;te;i
+  tr -cd '\12\15\40-\176' | # filter - pass lf, cr, printable
+   tee -- "$esprjtmp" |
+    # filter sequences with correct option=value, once per line
+    # insert blank line if $regx does not match
+    sed -rn -- 's/.*'"$regx"'.*/\1/p;te;i
 :e' | tee -- "$esprjraw" | {
-    # escape forward slashes in path
-    # (do not restrict use of any arbitrary path/filename char to delimit sed)
-    absolute="${absolute//\//\\/}"'\/'
-    # fix relative projectdir in session registration file
-    fixrel="s/(projectdir=')([^/][^']*')/\1"
-    sed -r -- "$fixrel$absolute"'\2/;Te;i# fixed relative projectdir
+     # escape forward slashes in path
+     # (instead of using up a filename char to delimit sed)
+     absolute="${absolute//\//\\/}"'\/'
+     # fix relative projectdir in session registration file
+     fixrel="s/(projectdir=')([^/][^']*')/\1"
+     sed -r -- "$fixrel$absolute"'\2/;Te;i# fixed relative projectdir
 :e'; } > "$esprj"
  # send rejected lines to stderr
  diff -yt -- "$esprjraw" "$esprjtmp" |
@@ -421,6 +422,9 @@ bgline="$clrbg$bgpoly"
 ##  main arguments
 mode='one' # display
 state='default' # semaphore
+# allow mode argument after file/dir arguments
+[ -n "$3" ] && instr "$3" 'man make colors term page test keep' &&
+ set "$3" "$1" "$2"
 case "$1" in
  'man') edman ;;
  'make') project 'gen' ;;
@@ -500,11 +504,16 @@ diffproc(){
     padline "$clrtmd" " $targetfile" >> "$espr"
     #printf '%s' "$result" > tmpfoldif
    else
+    # translate first byte of variable width utf-8 char to '?'
+    # (positioning gfmt at dpos)
+    # pass ascii lf, cr, printable chars
+    # tab '\11' expansion to spaces by diff prior
+    # include context lines, add line numbers
     printf '%s' "$result" |
-     iconv -f utf-8 -t ascii -c | # strip out variable width unicode chars
-      tr -cd '\11\12\15\40-\176' | # pass ascii tab, lf, cr, printable (octal)
+     tr '\300-\367' '?' |
+      tr -cd '\12\15\40-\176' |
        grep -nEC"$context" -- '^.{'"$dpos"'}[<>|].*' |
-        tfixdif > "$espr"
+        tfixdif > "$espr" # parse filtered diff output
    fi
   ;;
   2) padline "$clrmsf$clrbg" "$result" >> "$errorfile"'_' ;;
@@ -537,14 +546,14 @@ tfixdif(){
    right="${fline:$num+1+$dpos}"
    if [ "$type" = ':' ]; then
    # added, deleted and changed lines
-    mod="${right::1}";
-    # format as appropriate to diff symbol ('mod')
-    if [ "$mod" = '>' ]; then
+    gfmt="${right::1}";
+    # format as appropriate to diff symbol $gfmt
+    if [ "$gfmt" = '>' ]; then
     # removed lines reflect target file line number
      : $(( srcoff += 1 ))
      newnum=$(( number - cmpoff ))
      right="$clrtgt<$clrrmv${right:1}${dspace:${#right}}$clrtgt"
-    elif [ "$mod" = '<' ]; then
+    elif [ "$gfmt" = '<' ]; then
     # new lines reflect source line number
      : $(( cmpoff += 1 ))
      newnum=$(( number - srcoff ))
@@ -671,7 +680,7 @@ if [ "$state" = 'dual' ]; then
  diffproc;
 else
  instr "$state" 'default dir' &&
-  supreport "$sourcedir" "$targetdir" >> "$missfile" &
+  supreport "$sourcedir" "$targetdir" > "$missfile" &
   # supplemental report for default-project and extra-project 'dir'
  mainloop # queue for dispatch
  # single-project, default-project and extra-project 'dir' runs
@@ -681,6 +690,9 @@ wait # for report sub-processes to finish
 
 # core time test exits here
 [ "$mode" = 'test' ] && exit
+
+
+##  post-processing
 
 
 finish(){
@@ -695,7 +707,6 @@ finish(){
 }
 
 
-##  post-processing
 # prepare brief section labels
 # missing files section is prepped in 'initiate diff reports'
 padline "$clrbg$bgline
@@ -787,8 +798,8 @@ exit
 #    (scroll-back coloring is reversed)
 
 ##  strategies for consistent background color
-#    print to each cell of window text area then over-writing, or
 #    pad each line with spaces to edge of screen, or
+#    print to each cell of window text area then over-writing, or
 #    'yellow background\033[43m home\033[H erase\033[J' or
 #    '\e[K' at start of each line, then erase to bottom of screen
 #    not every terminal control-sequence code enjoys broad support
@@ -809,7 +820,7 @@ exit
 ##  busybox
 #    if busybox is the default system shell:
 #     change shebang to #!/bin/sh
-#     install iconv and full versions of builtins diff, less
+#     install full versions of builtins diff, less
 #    distribution binary does not pass unit tests A or B:
 #     compile busybox-1.32.1 (latest stable)
 #      make defconfig
