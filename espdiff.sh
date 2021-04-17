@@ -1,5 +1,5 @@
 #!/bin/bash
-#!/home/busybox/busybox-1.32.1/busybox sh
+#!/home/busybox-1.32.1/busybox sh
 
 # Copyright (c) April 5th, 2021 arlusf@github, all rights reserved
 # this version does not offer any license agreement
@@ -15,34 +15,43 @@ name='  espdiff.sh  version 5.0'
 #      >$  ./espdiff.sh help
 
 ##  install
-#    project:  configuration file, registration file or hard-coded
+#    project:  configuration file, registration file or inline register
 #    shell:    move busybox shebang to first line as required
-#    options:  confirm general options below
+#    options:  review general options below
 
-###  hard-coded
-## uncomment to define default project paths
+###  inline register
+# uncomment to define default project paths
  # projectdir="$HOME"'/path/to/project/base'
  # sourcedir='current'
  # targetdir='previous'
 
 ###  general options
-## locate configfile in a secure area
-readonly configfile="$HOME"'/.local/.espdiffrc'
- # configfile='/root/espdiff/.espdiffrc' # embedded devices
-readonly mdsum='12f747c66f2602751b7961e4c62eb616' # configfile
- # mdsum='unlocked' # disable md5 verification
+
+## configfile location and md5sum
+readonly configfile="$HOME"'/.espdiffrc'
+ # readonly configfile='/root/.espdiffrc' # embedded devices
+readonly mdsum='12f747c66f2602751b7961e4c62eb616'
+ # readonly mdsum='unlocked' # disable configfile verification
+
 ## session location for project registration
-sessiondir="$HOME"
+sessiondir="$HOME" #/.local/espdsh"
+mdsessions='' # do not require session verification
+ # mdsessions=" derived from resultant session register
+ # 3c3d3c5249b3c5046f318a39084d672f .esprj from example.tar
+ # 6f66685a3761f8eb60a580568e18456d  testdirect='true' >> .esprj
+ # "
+
 ## where to create report directory
 tmpdir='/tmp'
  # tmpdir='/run/user/1000' # systemd tmpfs, user owned
-## restriction on names in project registration file
+
+## sanitize folder and color names in project registration file
 allowchars='a-zA-Z0-9/\_. -' # literal dash - last
 
 ###  format options
-columns="$(stty size)" # generally available
-lines="$columns"; lines="${lines% *}"
-columns="${columns#* }"
+size="$(stty size)" # generally available
+lines="${size% *}"
+columns="${size#* }"
  # columns="$(tput cols)"; lines="$(tput lines)" # alternate method
  # columns=153; lines=40 # static over-ride
 
@@ -50,8 +59,9 @@ columns="${columns#* }"
 found(){ [ -f "$1" ] && echo 'exists' || echo 'not found'; }
 edhelp="
 ##  usage:
-#    espdiff.sh ( man ) ( page | keep | term )  file ( file2 )  |  dir1  dir2
-#    man  - read the manual, arguments are optional
+#    espdiff.sh ( man ) ( page | keep | term )
+#               ( file ( file2 )  |  dir1 ( dir2 ) )
+#    arguments are optional
 "
 edman(){
 echo "
@@ -60,7 +70,7 @@ $name
 ##  small project diff - compare source files with target folder
 #    side by side + line numbers + 256 & 24-bit color + multi-process
 #    numbering up to 9999 is presented in the middle column
-#    the line number of missing lines reflects those of the target file
+#    the line number of a removed line reflects that of the target file
 #    additions and context lines are to the right
 #    deletions are on the left hand side
 #    sub-folder contents are briefly evaluated
@@ -86,9 +96,9 @@ $edhelp
 #   dir1  dir2  ~ compare files in dir1 with dir2
 
 
-##  resource configuration file over-rides hard-coded definitions
+##  resource configuration file over-rides inline definitions
 #   skip  - ignore resource file - given before any other arguments
-#    this file is not sanitized, use with care, md5 verified
+#    md5sum verified
 #
 #      $configfile  $(found "$configfile")
 
@@ -134,7 +144,8 @@ exit
 
 ##  core performance test
 #    project reports are parsed but not displayed
-#    shows concurrent process limiting, no post-processing
+#    shows concurrent process limiting
+#    no post-processing
 #
 #      >$  time ./espdiff.sh test
 
@@ -142,6 +153,7 @@ exit
 umask 066 # user only permissions for new files
 # maximum number of simultaneous diff processes (main loop)
 dproclimit=1
+
 # use external link instead of busybox builtins
 alias diff="$( which diff )" # -y option
 alias less="$( which less )" # -r option
@@ -149,8 +161,11 @@ alias less="$( which less )" # -r option
 ###  project options
 context=1 #  lines of leading and tailing context
 glob='*' # default, process all files in source folder
-# enable 24bit depth direct-color test for 'colors' and 'make' options
+
+## enable 24bit depth direct-color test for 'colors' and 'make' options
+ # testdirect='true'
 testdirect='false'
+
 # color palette may be redefined in project registration file
 # 256color names are sourced from configuration file
 # 24bit direct-color names are user-supplied
@@ -159,43 +174,47 @@ testdirect='false'
 #      >$  ./espdiff.sh make
 #    show color swatch:
 #      >$  ./espdiff.sh colors
-#
 
 ##  terminal control sequences
-# C0 code bytes (7-bit, 0-127, control 0-31)
+# C0 code bytes (7bit, 0-127, control 0-31)
 esc=$'\033' # 27 0x1b ascii escape key-code ^[
-st=$esc'\' # ST
+st=$esc'\' # ST 8bit C1 \233
 bell=$'\007' # BEL
-osc=$esc']' # Operating System Command  OSC Ps ; Pt BEL (xterm)
+
+osc=$esc']' # Operating System Command  OSC Ps ; Pt BEL  (xterm)
 # Ps=0 change icon name and window title ; Pt=text  BEL or ST (\e\\)
 titlepre=$osc'0;' # OSC + change window title
 titletxt='espdiff.sh' # Pt
-csi="$esc"'[' # CSI - Control Sequence Introducer
+
+csi=$esc'[' # CSI - Control Sequence Introducer ^[[
 bold=$csi'1m' # m is final character for CSI
 reset=$csi'0m'
 normal=$csi'22m' # not bold, not faint
 reverse=$csi'7m'
+
 fgc=$csi'38;5;' # CSI + set foreground indexed-color
 fdc=$csi'38;2;' # foreground direct-color sequence
 # relict form: '\e[38:2::R:G:Bm' ITU-T Recommendation T.416, aka ISO/IEC 8613-6
 # color-space is to be specified within the consecutive double colon syntax
 # (future use... color-space, tolerance, alpha?)
 bdc=$csi'48;2;' # background direct-color
-bkg=$csi'48;5;' # background 256color
+bgc=$csi'48;5;' # background 256color
+
 # default colors, 256color index
 # 'gfmt' diff symbol  <|>
-clrbg=$bkg'235m';   typ_clrbg='background color'
+clrbg=$bgc'235m';   typ_clrbg='background color'
 clrbrf=$fgc'103m';  typ_clrbrf='brief section header'
 clrerr=$fgc'124m';  typ_clrerr='error'
 clrmsf=$fgc'172m';  typ_clrmsf='missing file'
-clrsmd=$fgc'185m';  typ_clrsmd='changed to line'
-clrtmd=$fgc'186m';  typ_clrtmd='changed from line and gfmt'
-clrnew=$fgc'159m';  typ_clrnew='added line'
+clrsmd=$fgc'185m';  typ_clrsmd='changed-to text'
+clrtmd=$fgc'186m';  typ_clrtmd='changed-from text and gfmt'
+clrnew=$fgc'159m';  typ_clrnew='added text'
 clrrmv=$fgc'101m';  typ_clrrmv='removed text'
 clrtxt=$fgc'188m';  typ_clrtxt='context line, separator and type'
 clrsrc=$fgc'108m';  typ_clrsrc='source line-number and gfmt, new file'
 clrtgt=$fgc'130m';  typ_clrtgt='target line-number and gfmt'
 clrttl=$fgc'195m';  typ_clrttl="header ($bold bold $normal)"
+
 clrdcs=$fdc'128;128;128m'
 typ_clrdcs='24bit direct-color sample'
 nam_clrdcs='darker gray' # 24bit color names are user specified
@@ -232,15 +251,14 @@ project(){
  else # 'show'
   printf '%b\n' "$bgline"
   ascii='AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz 0123456789'
-  ascii="${ascii::${#bgpoly}}" # truncate and pad
-  aspace="${bgpoly:${#ascii}}"; ascii="$ascii$aspace"
+  ascii="${ascii::${#bgpoly}}" # truncate
+  aspace="${bgpoly:${#ascii}}" # pad
+  ascii="$ascii$aspace"
   sample="
 $ascii
-$bold$ascii
 $reverse$bgpoly
 $bgpoly$reset
-$bgline
-"
+$bgline"
  fi
  if [ -n "$xnam" ]; then # 256color names from configuration file
   x=-1; IFS=','; for b in $xnam; do eval "xnam$(( x += 1 ))=$b"; done
@@ -253,13 +271,15 @@ $bgline
   nam='nam_'"$color"
   eval "colr=\$$color"
   cidx="${colr:7:-1}"
+  cidx="${cidx#"${cidx%%[!0]*}"}" # strip leading zeros
+  : "${cidx:=0}" # no empty string
   if [ "${colr::${#fgc}}" = "$fgc" ]; then
    # $colr begins with '$fgc'
    key='$fgc'
    eval "nam=\"\$xnam$cidx\""
-   # $fgc and $bkg sequences use configured names
-  elif [ "${colr::${#bkg}}" = "$bkg" ]; then
-   key='$bkg'
+   # $fgc and $bgc sequences use configured names
+  elif [ "${colr::${#bgc}}" = "$bgc" ]; then
+   key='$bgc'
    eval "nam=\"\$xnam$cidx\""
   else
    eval "nam=\"\$$nam\""
@@ -269,17 +289,24 @@ $bgline
   eval "typ=\$$typ"
   if [ "$1" = 'gen' ]; then
    [ "$color" = 'clrbg' ] && fcol='' || fcol=$colr
-   instr "$key" '$fdc $bdc' &&
-    printf '%snam_%s\n' "$fcol" "$color='$nam'" &&
-     nam="user custom"
-   color="$color=$key'${colr#*[25];}'"
+   if instr "$key" '$fdc $bdc'; then
+    printf '%snam_%s\n' "$fcol" "$color='$nam'"
+    nam="user custom"
+    color="$color=$key'${colr#*[25];}'"
+   else
+    color="$color=$key'${cidx}m'"
+   fi
    printf '%s%-27s# %-24s%s\n' "$fcol" "$color" "$nam" "$typ$clrbg"
   else # 'show'
    [ "$color" = 'clrbg' ] && continue
-   padline "$clrbg$colr" "'$nam'   $typ" "$sample"
+   [ "$color" = 'clrttl' ] && tsamp="$bold" || tsamp=''
+   padline "$clrbg$colr" "'$nam'   $typ" "$tsamp$sample"
   fi
  done
- [ "$1" = 'show' ] && [ "$testdirect" = 'true' ] && ramps
+ [ "$1" = 'show' ] && {
+  printf '%s\n' "$bgpoly"
+  [ "$testdirect" = 'true' ] && ramps
+ }
  printf '%s\n' "$reset$bgpoly"
  exit
 }
@@ -292,15 +319,21 @@ sanitize(){
  regx="$regx|((columns|lines)='[0-9]{1,4}')"
  regx="$regx|((targetdir|sourcedir|projectdir)='[$allowchars]{3,80}')"
  regx="$regx|((titletxt|nam_clr($scolor))='[$allowchars]{3,25}')"
- num='[0-9]{1,3}'
+ num='(25[0-5]|(([0-1])?[0-9]|2[0-4])?[0-9])' # 0-255
  cdirect="$num"'[;:]'"$num"'[;:]'
- regx="$regx|(clr($scolor)=[$](fgc'|bkg'|([fb]dc)'$cdirect)${num}m'))" # m
+ regx="$regx|(clr($scolor)=[$](fgc'|bgc'|([fb]dc)'$cdirect)${num}m'))" # m
  esprjtmp="$esprj"'tmp'
  esprjraw="$esprj"'raw'
  seqrx="$csi"'[^m]*m' # m is CSI final char
  if [ "$1" ]; then
   regfile="$1"
-  absolute="$currentdir/${1%/*}"
+  if [ ${1::1} = '/' ]; then
+   absolute="${1%/*}"
+  else
+   absolute="$currentdir/${1%/*}"
+   # reduce '/dir/..' sequences recursively
+   absolute="$( echo $absolute | sed -r ':a;s_/[^/]+/\.\.__;ta' )"
+  fi
  else
   regfile='.esprj'
   absolute="$currentdir"
@@ -315,7 +348,7 @@ sanitize(){
     sed -rn -- 's/.*'"$regx"'.*/\1/p;te;i
 :e' | tee -- "$esprjraw" | {
      # escape forward slashes in path
-     # (instead of using up a filename char to delimit sed)
+     # (not restricting use of any filename chars to delimit sed)
      absolute="${absolute//\//\\/}"'\/'
      # fix relative projectdir in session registration file
      fixrel="s/(projectdir=')([^/][^']*')/\1"
@@ -323,13 +356,13 @@ sanitize(){
 :e'; } > "$esprj"
  # send rejected lines to stderr
  diff -yt -- "$esprjraw" "$esprjtmp" |
-  sed -nr -- 's/^\s+\|(.*)/'"$clrerr"'\1'"$reset"'/p' 1>&2
+  sed -nr -- 's/^\s+\|(.*)/'"$clrerr"'\1'"$reset"'/p' >&2
  # cleanup
  rm -f -- "$esprjtmp" "$esprjraw"
 }
 
 
-## preliminary arguments
+##  precursory arguments
 printf '%s' "$reset" # start with 'clean slate'
 case "$1" in
  '--help'|?'help'|'help') echo "$edhelp"; exit ;;
@@ -347,35 +380,45 @@ case "$1" in
     printf 'using %s %s\n' "$configfile" "$lock"
     . "$configfile"
    else
-    printf '%sconfigfile checksum unverified%s\n' "$clrerr" "$reset" 1>&2
+    printf '%sconfigfile checksum unverified%s\n' "$clrerr" "$reset" >&2
    fi
   fi
  ;;
 esac
+
 
 instr(){ # return true if $1 is a substring of $2, 0=true, !0=false
  strin="${2/"$1"}"; [ "${#strin}" -ne "${#2}" ] && return 0 || return 1; }
 
 fixup(){ [ "${1: -1}" = '/' ] && echo "$1" || echo "$1"'/'; }
 
+
+##  precursory settings
+readonly currentdir="$( pwd )"
+colors='bg|brf|msf|tgt|src|smd|txt|ttl|new|tmd|rmv|err'
 # after resource configuration
 tmpdir="$( fixup "$tmpdir" )"
 sessiondir="$( fixup "$sessiondir" )"
 esprj="$sessiondir"'.esprj' # session project file
 
-# preliminary settings
-readonly currentdir="$( pwd )"
-colors='bg|brf|msf|tgt|src|smd|txt|ttl|new|tmd|rmv|err'
+[ -d "$sessiondir" ] ||
+ { printf '%sno session dir%s\n' "$clrerr" "$reset" >&2; exit; }
 
 ##  include project registration file
 # explicit
 if [ "$1" = 'register' ]; then
  [ -n "$2" ] && {
-  [ -d "$2" ] && regp="$( fixup "$2" )"'.esprj' || regp="$2"
-  if [ -f '.esprj' ] || [ -f '../.esprj' ]; then
+  [ -d "$2" ] &&
+   regp="$( fixup "$2" )"'.esprj' ||
+   regp="$2"
+  # do not include the session register as local
+  if ( [ -f '.esprj' ] && [ ! "$esprj" -ef '.esprj' ] ) ||
+   ( [ -f '../.esprj' ] && [ ! "$esprj" -ef '../.esprj' ] ); then
+   # presence of a local project would overwrite explicit registration
    echo 'local project has priority'
   elif [ -f "$regp" ]; then
-   if [ "$regp" -ef "$esprj" ]; then echo 'session previously registered'
+   if [ "$regp" -ef "$esprj" ]; then
+    echo 'session previously registered'
    else
     printf 'register project %s\n' "$regp"
     sanitize "$regp"
@@ -402,25 +445,39 @@ else
  fi
 fi
 if [ "$prloc" != 'default' ]; then
- if [ "$prloc" != 'session' ]; then
+ if instr "$prloc" 'local parent'; then
   if [ '.esprj' -ef "$esprj" ]; then
-   prloc='self' # sessiondir is same location as '.esprj file
+   prloc='session' # sessiondir is same location as '.esprj' file
   else
    sanitize
   fi
  fi
+ # verify md5sum for session
+ if [ "$prloc" = 'session' ] && [ -n "$mdsessions" ]; then
+  sum="$( md5sum -- "$esprj" )"
+  sum="${sum%% *}"
+  if instr "$sum" "$mdsessions"; then
+   prloc='verified'
+  else
+   reginfo='- session failed to verify md5sum'
+   prloc='failed'
+  fi
+ fi
  echo "$prloc"' registration '"$reginfo"
- . "$esprj"
+ [ "$prloc" != 'failed' ] && . "$esprj"
 fi
+
 
 padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
 
-# effect potential 'columns' over-ride from config or reg file
+
+##  secondary settings
+# effect potential 'columns' over-ride from registration file
 bgpoly="$( printf "%-${columns}s" )"
 bgline="$clrbg$bgpoly"
 
 ##  main arguments
-mode='one' # display
+mode='default' # display
 state='default' # semaphore
 # allow mode argument after file/dir arguments
 [ -n "$3" ] && instr "$3" 'man make colors term page test keep' &&
@@ -435,7 +492,7 @@ case "$1" in
  'keep') mode='keep'; tmpdir='' ;;
  '--') shift ;; # end-of-options, default mode
 esac
-[ "$mode" = 'one' ] || shift # if $mode is not default, $1 was a mode argument
+[ "$mode" = 'default' ] || shift # if $1 was a mode argument
 if [ -n "$2" ]; then # extra-project diff
  cd "$currentdir" || exit
  if [ -d "$1" ] && [ -d "$2" ]; then # compare two directories
@@ -460,12 +517,12 @@ if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
  [ -d "$projectdir" ] ||
   { echo 'invalid projectdir: '"$projectdir"; exit; }
  cd "$projectdir" || exit
- [ -d "$projectdir$sourcedir" ] ||
+ [ -d "$sourcedir" ] ||
   { echo 'invalid sourcedir '"$projectdir$sourcedir"; exit; }
- [ -d "$projectdir$targetdir" ] ||
+ [ -d "$targetdir" ] ||
   { echo 'invalid targetdir '"$projectdir$targetdir"; exit; }
  [ "$prloc" = 'default' ] &&
-  echo "$prloc"' registration' # hard-coded
+  echo 'inline registration'
  if [ "$state" = 'single' ]; then
   sproj="$projectdir$sourcedir$1"
   if [ -d "$projectdir$1" ]; then # compare specified project folder
@@ -498,20 +555,22 @@ diffproc(){
   1)
    padline "$clrsmd" " $fname" >> "$changefile"
    espr="$reportdir"'/report_'"$fname"'.espdif'
+   [ "$mode" = 'keep' ] &&
+    printf '%s' "$result" > "$reportdir"'/raw-ystd-'"$dwidth"'_'"$fname"
    if [ -d "$sourcefile" ]; then
-    padline "$clrbrf" "${dspace:${#foldif}/2}$foldif" > "$espr"
+    padline "$clrbg$clrbrf" "${dspace:${#foldif}/2}$foldif" > "$espr"
     padline "$clrsmd" " $sourcefile" >> "$espr"
-    padline "$clrtmd" " $targetfile" >> "$espr"
-    #printf '%s' "$result" > tmpfoldif
+    padline "$clrtmd" " $targetfile" "
+$bgline" >> "$espr"
    else
     # translate first byte of variable width utf-8 char to '?'
     # (positioning gfmt at dpos)
     # pass ascii lf, cr, printable chars
-    # tab '\11' expansion to spaces by diff prior
+    # (tab '\11' expansion to spaces by diff prior)
     # include context lines, add line numbers
     printf '%s' "$result" |
-     tr '\300-\367' '?' |
-      tr -cd '\12\15\40-\176' |
+     tr '\300-\375' '?' | # -\367 16bit BMP, Plane 0 (1-3 bytes follow)
+      tr -dc '\12\15\40-\176' | # or '[:print:]\n'
        grep -nEC"$context" -- '^.{'"$dpos"'}[<>|].*' |
         tfixdif > "$espr" # parse filtered diff output
    fi
@@ -525,15 +584,12 @@ diffproc(){
 
 
 tfixdif(){
- # source-line number = diff numbering - removed lines
- # context-line and changed-line numbers - same as source-lines
- # removed-line number = diff numbering - added lines
  cmpoff=''
  srcoff=''
  modline=''
  while IFS='' read -r fline; do
   if [ "$fline" = '--' ]; then
-   # separator (--) line, pad with spaces to position
+   # separator, pad with spaces to position
    sep="${dplace:$newlen}${dseparator: -$newlen}"
    printf '%s\n' "$clrtxt$dspace$sep$sepspace"
   else
@@ -579,7 +635,6 @@ tfixdif(){
   fi
  done
  # summary
- # justification - left (align with target text), right \n center
  # ' 1 lines' pattern match requires a space after =" (next three lines)
  [ "$cmpoff" ] && cmpoff=" $cmpoff lines added  "
  [ "$modline" ] && modline=" $modline lines modified  "
@@ -599,7 +654,6 @@ tfixdif(){
 
 supreport(){
  # supplemental report - find missing files for project
- export LC_ALL=C # sort order
  supsrc="$reportdir"'supsrc'
  ls "$1" > "$supsrc"
  suptgt="$reportdir"'suptgt'
@@ -611,7 +665,6 @@ supreport(){
    sed -nr -- 's/^<(.*) /'"$clrsrc"'>'"$clrmsf"'\1 /p
     s/^>(.*) /'"$bell$clrtgt"' <'"$clrmsf"'\1/p' |
     sort -n --  )" # bell sorts first
- # write supplemental report data to stdout
  [ -n "$mdiff" ] &&
   padline "$bgpoly
 $clrbrf" 'Missing' "
@@ -643,7 +696,7 @@ mainloop(){
 }
 
 
-##  change terminal window title, assume $PS1 resets this
+##  change terminal window title, assume $PS1 resets this later
 printf '%s' "$titlepre$titletxt$st"
 
 ##  pre-formatting
@@ -661,11 +714,14 @@ dspace="${bgpoly::$dspclen}"
 sepspace="${dspace:1}"
 
 ##  setup temp folder, exit trap handles removal
-texit(){ [ -n "$reportdir" ] && [ "$mode" = 'keep' ] || rm -rf -- "$reportdir"; }
+texit(){ [ -n "$reportdir" ] &&
+ [ "$mode" = 'keep' ] ||
+  rm -rf -- "$reportdir";
+}
 unset reportdir
 trap texit EXIT
 reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
- { printf '%serror creating temp file\n' "$clrerr" 1>&2; exit 1; }
+ { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
 
 ##  assign brief names
 unknown="$reportdir"'/_000_unknown_'
@@ -674,7 +730,9 @@ missfile="$reportdir"'/_002_missing_'
 changefile="$reportdir"'/_003_changed'
 samefile="$reportdir"'/_004_same'
 
-##  initiate diff reports
+export LC_ALL=C # sort order
+
+##  main - initiate diff reports
 if [ "$state" = 'dual' ]; then
  # directly dispatch extra-project 'file' runs
  diffproc;
@@ -699,8 +757,8 @@ finish(){
  # fill bottom of file given with lines of spaces, minus offset argument
  flines="$(wc -l -- "$1")"
  flines="${flines%% *}"
- # can be called with $2 offset omitted
- polylines=$(( lines - flines - ($2 + 1) ))
+ # can be called with $2 offset omitted ($2+0 if last term)
+ polylines=$(( lines - flines - $2 - 1 ))
  while [ $(( polylines -= 1 )) -ge 0 ]; do
   printf '%s\n' "$bgpoly" >> "$1"
  done
@@ -708,20 +766,23 @@ finish(){
 
 
 # prepare brief section labels
+brf="$reportdir"'/_0_brief'
 # missing files section is prepped in 'initiate diff reports'
-padline "$clrbg$bgline
+padline "$bgline
 $clrbrf" 'Errors' > "$errorfile"
-padline "$bgpoly
+padline "$bgline
 $clrbrf" 'Different' > "$changefile"'_'
-padline "$bgpoly
+padline "$bgline
 $clrbrf" 'Same' > "$samefile"'_'
 # assemble preview page from meta files
 [ -f "$changefile" ] &&
- sort -- "$changefile" > "$changefile"'__'
+ printf '%s' "$clrbg" > "$changefile"'__' &&
+  sort -- "$changefile" >> "$changefile"'__'
 [ -f "$samefile" ] &&
- sort -- "$samefile" > "$samefile"'__'
-cat -- "$reportdir"/_00*_ > "$reportdir"'/_0_brief'
-printf '%s\n' "$bgpoly" >> "$reportdir"'/_0_brief'
+ printf '%s' "$clrbg" > "$samefile"'__' &&
+  sort -- "$samefile" >> "$samefile"'__'
+cat -- "$reportdir"/_00*_ > "$brf"
+printf '%s\n' "$bgline" >> "$brf"
 # remove meta files
 [ "$mode" = 'keep' ] ||
  rm -f -- "$reportdir"/_00* "$changefile" "$samefile"
@@ -732,9 +793,9 @@ for final in "$reportdir"/*.espdif
 do
  [ -f "$final" ] && { # skip loop if no reports
   tfx="$final"'_tfx'
-  tail -n 3 -- "$final" | {
-   IFS=''; read -r line; read -r swap
-   instr "$foldif" "$line" ||
+  tail -n 4 -- "$final" | {
+   IFS=''; read -r fif; read -r line; read -r swap
+   instr "$foldif" "$fif" || # temp bypass subfolder content reports
     printf '%s\n%s\n%s\n%s\n' "$bgline" "$swap" "$line" "$bgpoly" > "$tfx"
   }
   cat -- "$final" >> "$tfx"
@@ -748,15 +809,22 @@ done
 
 # paint empty bottom lines of initial page with background color
 if [ $mode = 'page' ]; then
- finish "$reportdir"'/_0_brief'
-elif [ "$mode" = 'one' ]; then
+ finish "$brf"
+elif [ "$mode" = 'default' ]; then
  if [ "$rcount" = 1 ]; then
   # combined brief and one report file
-  alines="$( wc -l -- "$reportdir"'/_0_brief' )"
-  finish "$final"'_tfx' "${alines%% *}"
+  alines="$( wc -l -- "$brf" )"
+  finish "$tfx" "${alines%% *}"
  elif [ -z "$tfx" ]; then
   # no report file was generated
-  finish "$reportdir"'/_0_brief'
+  finish "$brf"
+ fi
+elif [ "$mode" = 'term' ]; then
+ # final lines to standard out
+ if [ "$rcount" -ge 1 ]; then
+  printf '%s\n\n' "$bgline$reset" >> "$tfx"
+ else
+  printf '%s\n\n' "$bgline$reset" >> "$brf"
  fi
 fi
 
@@ -764,13 +832,12 @@ fi
 if [ "$mode" = 'page' ]; then
  # paged, less
  less -rc -- "$reportdir"/*
-elif  [ "$mode" = 'one' ]; then
+elif  [ "$mode" = 'default' ]; then
  # all reports in one, less
  cat -- "$reportdir"/* | less -rc --
 elif  [ "$mode" = 'term' ]; then
  # no less
  cat -- "$reportdir"/*
- printf '%s\n\n' "$reset"
 fi
 
 exit
@@ -824,7 +891,7 @@ exit
 #    distribution binary does not pass unit tests A or B:
 #     compile busybox-1.32.1 (latest stable)
 #      make defconfig
-#      make menuconfig - add or remove functionality/builtins*
+#      or make menuconfig - add and remove functionality/builtins*
 #      make
 
 ##  unit tests - first line describes correct result
@@ -837,13 +904,13 @@ exit
 #    a='asdfqwerty'; echo ${a:4:-3}
 #      error:
 #      sh: Illegal number: -3
-#    ${ substring expansion variable : offset parameter : -length is negative }
+#    ${ substring expansion parameter : offset : -length is negative }
 #      in Bash since 4.2-alpha, busybox?
 
 ##  troubleshooting & theory of operation
 #
 #   $dpos is exact offset to the middle column in side-by-side diff output
-#   this is expected to be standard for any implemented diff
+#   $gfmt position is expected to be consistent for any implemented diff
 #   using $dpos, grep provides line numbers, discarding unselected context
 #   the line is then split in half, colorized and reassembled
 
