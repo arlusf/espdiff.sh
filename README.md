@@ -48,7 +48,7 @@ simply want to check whether your terminal supports 24bit direct-color?
 
 **to include color name index:**
 
-`cp .espdiffrc ~/.local/`
+`cp .espdiffrc ~/`
 
 **if terminal supports 24-bit direct-color:**
 
