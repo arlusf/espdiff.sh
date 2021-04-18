@@ -112,7 +112,6 @@ simply want to check whether your terminal supports 24bit direct-color?
     distribution binary does not pass unit tests A or B:
      compile busybox-1.32.1 (latest stable)
       make defconfig
-      make menuconfig - add or remove functionality/builtins*
       make
 
   unit tests - first line describes correct result
