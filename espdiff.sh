@@ -15,8 +15,8 @@ name='  espdiff.sh  version 5.0'
 #      >$  ./espdiff.sh help
 
 ##  install
-#    project:  configuration file, registration file or inline register
 #    shell:    move busybox shebang to first line as required
+#    project:  registration file or inline register
 #    options:  review general options below
 
 ###  inline register
@@ -27,7 +27,7 @@ name='  espdiff.sh  version 5.0'
 
 ###  general options
 
-## configfile location and md5sum
+## configfile  location and md5sum
 readonly configfile="$HOME"'/.espdiffrc'
  # readonly configfile='/root/.espdiffrc' # embedded devices
 readonly mdsum='12f747c66f2602751b7961e4c62eb616'
@@ -45,7 +45,7 @@ mdsessions='' # do not require session verification
 tmpdir='/tmp'
  # tmpdir='/run/user/1000' # systemd tmpfs, user owned
 
-## sanitize folder and color names in project registration file
+## sanitized folder and color names in project registration file
 allowchars='a-zA-Z0-9/\_. -' # literal dash - last
 
 ###  format options
@@ -156,7 +156,6 @@ dproclimit=1
 
 # use external link instead of busybox builtins
 alias diff="$( which diff )" # -y option
-alias less="$( which less )" # -r option
 
 ###  project options
 context=1 #  lines of leading and tailing context
@@ -178,7 +177,7 @@ testdirect='false'
 ##  terminal control sequences
 # C0 code bytes (7bit, 0-127, control 0-31)
 esc=$'\033' # 27 0x1b ascii escape key-code ^[
-st=$esc'\' # ST 8bit C1 \233
+st=$esc'\' # ST (8bitC1=\233)
 bell=$'\007' # BEL
 
 osc=$esc']' # Operating System Command  OSC Ps ; Pt BEL  (xterm)
@@ -272,7 +271,7 @@ $bgline"
   eval "colr=\$$color"
   cidx="${colr:7:-1}"
   cidx="${cidx#"${cidx%%[!0]*}"}" # strip leading zeros
-  : "${cidx:=0}" # no empty string
+  : "${cidx:=0}" # do not leave $cidx empty
   if [ "${colr::${#fgc}}" = "$fgc" ]; then
    # $colr begins with '$fgc'
    key='$fgc'
@@ -312,7 +311,34 @@ $bgline"
 }
 
 
+reduce(){
+ first="${absolute%%/..*}"
+ while [ ${#first} -ne ${#absolute} ]
+ do
+  second="${absolute:${#first}+3}"
+  first="${first%/*}"
+  absolute="$first$second"
+  first="${absolute%%/..*}"
+ done
+ : "${absolute:=/}"
+}
+
+
 sanitize(){
+ esprjtmp="$esprj"'tmp'
+ if [ "$1" ]; then
+  regfile="$1"
+  if [ ${1::1} = '/' ]; then
+   absolute="${1%/*}"
+  else
+   absolute="$currentdir/${1%/*}"
+   reduce #'/dir/..' sequences recursively
+  fi
+ else
+  regfile='.esprj'
+  absolute="$currentdir"
+  [ "$prloc" = 'parent' ] && absolute="${absolute%/*}"
+ fi
  scolor="$colors"'|dcs' # permit direct-color sample in project registration
  regx="((context='[1-9]')"
  regx="$regx|(testdirect='(true|false)')"
@@ -322,31 +348,15 @@ sanitize(){
  num='(25[0-5]|(([0-1])?[0-9]|2[0-4])?[0-9])' # 0-255
  cdirect="$num"'[;:]'"$num"'[;:]'
  regx="$regx|(clr($scolor)=[$](fgc'|bgc'|([fb]dc)'$cdirect)${num}m'))" # m
- esprjtmp="$esprj"'tmp'
- esprjraw="$esprj"'raw'
- seqrx="$csi"'[^m]*m' # m is CSI final char
- if [ "$1" ]; then
-  regfile="$1"
-  if [ ${1::1} = '/' ]; then
-   absolute="${1%/*}"
-  else
-   absolute="$currentdir/${1%/*}"
-   # reduce '/dir/..' sequences recursively
-   absolute="$( echo $absolute | sed -r ':a;s_/[^/]+/\.\.__;ta' )"
-  fi
- else
-  regfile='.esprj'
-  absolute="$currentdir"
-  [ "$prloc" = 'parent' ] && absolute="${absolute%/*}"
- fi
  # strip blank and comment lines along with any preceeding whitespace
+ seqrx="$csi"'[^m]*m' # m is CSI final char
  sed -r -- 's/'"$seqrx"'//g;/^\s*(#.*)?$/d' "$regfile" |
   tr -cd '\12\15\40-\176' | # filter - pass lf, cr, printable
    tee -- "$esprjtmp" |
     # filter sequences with correct option=value, once per line
     # insert blank line if $regx does not match
     sed -rn -- 's/.*'"$regx"'.*/\1/p;te;i
-:e' | tee -- "$esprjraw" | {
+:e' | {
      # escape forward slashes in path
      # (not restricting use of any filename chars to delimit sed)
      absolute="${absolute//\//\\/}"'\/'
@@ -355,10 +365,10 @@ sanitize(){
      sed -r -- "$fixrel$absolute"'\2/;Te;i# fixed relative projectdir
 :e'; } > "$esprj"
  # send rejected lines to stderr
- diff -yt -- "$esprjraw" "$esprjtmp" |
-  sed -nr -- 's/^\s+\|(.*)/'"$clrerr"'\1'"$reset"'/p' >&2
+ paste -d '\n' -- "$esprj" "$esprjtmp" |
+  sed -n -- '/^$/{n;s/\(.*\)/'"$clrerr"'  \1'"$reset"'/;p}' >&2
  # cleanup
- rm -f -- "$esprjtmp" "$esprjraw"
+ rm -f -- "$esprjtmp"
 }
 
 
@@ -402,7 +412,7 @@ sessiondir="$( fixup "$sessiondir" )"
 esprj="$sessiondir"'.esprj' # session project file
 
 [ -d "$sessiondir" ] ||
- { printf '%sno session dir%s\n' "$clrerr" "$reset" >&2; exit; }
+ { printf 'no sessiondir%s\n' "$clrerr$sessiondir$reset" >&2; exit; }
 
 ##  include project registration file
 # explicit
@@ -448,6 +458,7 @@ if [ "$prloc" != 'default' ]; then
  if instr "$prloc" 'local parent'; then
   if [ '.esprj' -ef "$esprj" ]; then
    prloc='session' # sessiondir is same location as '.esprj' file
+   reginfo="$sessiondir"
   else
    sanitize
   fi
@@ -730,7 +741,8 @@ missfile="$reportdir"'/_002_missing_'
 changefile="$reportdir"'/_003_changed'
 samefile="$reportdir"'/_004_same'
 
-export LC_ALL=C # sort order
+##  sort order
+export LC_ALL=C
 
 ##  main - initiate diff reports
 if [ "$state" = 'dual' ]; then
@@ -744,13 +756,12 @@ else
  # single-project, default-project and extra-project 'dir' runs
 fi
 
-wait # for report sub-processes to finish
+wait # for reporting sub-processes to finish
+
+##  post-processing
 
 # core time test exits here
 [ "$mode" = 'test' ] && exit
-
-
-##  post-processing
 
 
 finish(){
@@ -819,8 +830,8 @@ elif [ "$mode" = 'default' ]; then
   # no report file was generated
   finish "$brf"
  fi
+# final lines to standard out
 elif [ "$mode" = 'term' ]; then
- # final lines to standard out
  if [ "$rcount" -ge 1 ]; then
   printf '%s\n\n' "$bgline$reset" >> "$tfx"
  else
@@ -887,7 +898,7 @@ exit
 ##  busybox
 #    if busybox is the default system shell:
 #     change shebang to #!/bin/sh
-#     install full versions of builtins diff, less
+#     install full version of diff - builtin does not have -y option
 #    distribution binary does not pass unit tests A or B:
 #     compile busybox-1.32.1 (latest stable)
 #      make defconfig
