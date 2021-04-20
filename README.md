@@ -108,7 +108,7 @@ simply want to check whether your terminal supports 24bit direct-color?
   busybox
     if busybox is the default system shell:
      change shebang to !/bin/sh
-     install full versions of builtins diff, less
+     install full version of diff, builtin does not have '-y' option
     distribution binary does not pass unit tests A or B:
      compile busybox-1.32.1 (latest stable)
       make defconfig
