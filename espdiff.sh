@@ -27,7 +27,7 @@ name='  espdiff.sh  version 5.0'
 
 ###  general options
 
-## configfile  location and md5sum
+## configfile location and md5sum
 readonly configfile="$HOME"'/.espdiffrc'
  # readonly configfile='/root/.espdiffrc' # embedded devices
 readonly mdsum='12f747c66f2602751b7961e4c62eb616'
@@ -366,7 +366,7 @@ sanitize(){
 :e'; } > "$esprj"
  # send rejected lines to stderr
  paste -d '\n' -- "$esprj" "$esprjtmp" |
-  sed -n -- '/^$/{n;s/\(.*\)/'"$clrerr"'  \1'"$reset"'/;p}' >&2
+  sed -n -- '/^$/{n;s/\(.*\)/'"$clrerr"'  \1'"$reset"'/p}' >&2
  # cleanup
  rm -f -- "$esprjtmp"
 }
@@ -412,7 +412,7 @@ sessiondir="$( fixup "$sessiondir" )"
 esprj="$sessiondir"'.esprj' # session project file
 
 [ -d "$sessiondir" ] ||
- { printf 'no sessiondir%s\n' "$clrerr$sessiondir$reset" >&2; exit; }
+ { printf 'no sessiondir %s\n' "$clrerr$sessiondir$reset" >&2; exit; }
 
 ##  include project registration file
 # explicit
