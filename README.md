@@ -35,6 +35,8 @@ simply want to check whether your terminal supports 24bit direct-color?
 
 [![](screenshots/example.jpg)](screenshots/example.png)
 
+( type 'q' to exit less...)
+
 
 **make script executable:**
 
