@@ -104,7 +104,7 @@ $edhelp
 
 
 ##  project registration ( .esprj ) file properties have final priority
-#    espdiff.sh looks in current, then parent, then session dir
+#    espdiff.sh looks in current dir, then in parent dir for a project
 #    once found and registered as the session project, looking stops
 #    if not found, prior registration will be used instead
 #
@@ -139,8 +139,8 @@ less
 exit
 }
 
-## utf-8
-#   variable width characters are translated to '?'
+##  utf-8
+#    variable width characters are translated to '?'
 
 ##  core performance test
 #    project reports are parsed but not displayed
@@ -422,8 +422,8 @@ if [ "$1" = 'register' ]; then
    regp="$( fixup "$2" )"'.esprj' ||
    regp="$2"
   # do not include the session register as local
-  if ( [ -f '.esprj' ] && [ ! "$esprj" -ef '.esprj' ] ) ||
-   ( [ -f '../.esprj' ] && [ ! "$esprj" -ef '../.esprj' ] ); then
+  if { [ -f '.esprj' ] && [ ! "$esprj" -ef '.esprj' ]; } ||
+   { [ -f '../.esprj' ] && [ ! "$esprj" -ef '../.esprj' ]; } then
    # presence of a local project would overwrite explicit registration
    echo 'local project has priority'
   elif [ -f "$regp" ]; then
@@ -758,10 +758,10 @@ fi
 
 wait # for reporting sub-processes to finish
 
-##  post-processing
-
 # core time test exits here
 [ "$mode" = 'test' ] && exit
+
+##  post-processing
 
 
 finish(){
@@ -815,8 +815,11 @@ do
  }
 done
 
-# 'keep' exits here, or remove intermediate report files
-[ "$mode" = 'keep' ] && exit || rm -f -- "$reportdir"/*.espdif
+# 'keep' exits here
+[ "$mode" = 'keep' ] && exit
+
+# remove intermediate report files
+rm -f -- "$reportdir"/*.espdif
 
 # paint empty bottom lines of initial page with background color
 if [ $mode = 'page' ]; then
@@ -895,12 +898,16 @@ exit
 #    decimal  0, 95, 135, 175, 215, 255  (00, 5f, 87, af, d7, ff hex)
 #   232-255 greyscale - 24 shades,  8+(10*shade),  8;8;8m - 238;238;238m
 
-##  busybox
+##  busybox ~ 2X bash (twice as fast)
+# wget security patch did not apply to busybox-1.32.1:
+# https://git.busybox.net/busybox/commit/?id=fc2ce04a38ebfb03f9aeff205979786839cd5a7c
+# if this is of concern, compile the most recent commit of busybox-1.33_stable
+# 
 #    if busybox is the default system shell:
 #     change shebang to #!/bin/sh
 #     install full version of diff - builtin does not have -y option
 #    distribution binary does not pass unit tests A or B:
-#     compile busybox-1.32.1 (latest stable)
+#     compile busybox-1.32.1 (latest stable release)
 #      make defconfig
 #      or make menuconfig - add and remove functionality/builtins*
 #      make
