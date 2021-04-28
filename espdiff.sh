@@ -1,5 +1,5 @@
-#!/bin/bash
 #!/home/busybox-1.32.1/busybox sh
+#!/bin/bash
 
 # Copyright (c) April 5th, 2021 arlusf@github, all rights reserved
 # this version does not offer any license agreement
@@ -57,13 +57,13 @@ columns="${size#* }"
 
 
 found(){ [ -f "$1" ] && echo 'exists' || echo 'not found'; }
-edhelp="
+shelp="
 ##  usage:
 #    espdiff.sh ( man ) ( page | keep | term )
 #               ( file ( file2 )  |  dir1 ( dir2 ) )
 #    arguments are optional
 "
-edman(){
+sman(){
 echo "
 $name
 
@@ -74,7 +74,7 @@ $name
 #    additions and context lines are to the right
 #    deletions are on the left hand side
 #    sub-folder contents are briefly evaluated
-$edhelp
+$shelp
 ##  display-mode argument: file or directory arguments may follow
 #    (when not specified)  all reports display in one page with less
 #   page  - navigate each report separately with less  ( :n  :p  :x  = )
@@ -160,6 +160,9 @@ alias diff="$( which diff )" # -y option
 ###  project options
 context=1 #  lines of leading and tailing context
 glob='*' # default, process all files in source folder
+## show containing function names and section labels
+# bash:  fxname(){  |  ##  |  ###
+dfunc='\(^[[:alpha:]]\+(){$\)\|\(^[#]\{2,3\}\)'
 
 ## enable 24bit depth direct-color test for 'colors' and 'make' options
  # testdirect='true'
@@ -218,19 +221,6 @@ clrdcs=$fdc'128;128;128m'
 typ_clrdcs='24bit direct-color sample'
 nam_clrdcs='darker gray' # 24bit color names are user specified
 # 256color index to X11R4 name is sourced from configuration file
-
-
-ramps(){
- c=0
- while [ $(( c += 1 )) -le "$columns" ]; do
-  [ $c -gt 255 ] && gradient=255 || gradient=$c
-  greyscale="$greyscale$bdc$gradient;$gradient;${gradient}m "
-  rramp="$rramp$bdc$gradient;0;0m "
-  gramp="$gramp${bdc}0;$gradient;0m "
-  bramp="$bramp${bdc}0;0;${gradient}m "
- done
- printf '%s\n%s\n%s\n%s\n' "$greyscale" "$rramp" "$gramp" "$bramp"
-}
 
 
 project(){
@@ -311,6 +301,191 @@ $bgline"
 }
 
 
+ramps(){
+ c=0
+ while [ $(( c += 1 )) -le "$columns" ]; do
+  [ $c -gt 255 ] && gradient=255 || gradient=$c
+  greyscale="$greyscale$bdc$gradient;$gradient;${gradient}m "
+  rramp="$rramp$bdc$gradient;0;0m "
+  gramp="$gramp${bdc}0;$gradient;0m "
+  bramp="$bramp${bdc}0;0;${gradient}m "
+ done
+ printf '%s\n%s\n%s\n%s\n' "$greyscale" "$rramp" "$gramp" "$bramp"
+}
+
+
+diffproc(){
+ if [ -n "$layout" ]; then
+  result="$(
+   # report-identical-files   expand-tabs   minimal   unified-context
+   diff "$dopts" -F "$dfunc" -- "$sourcefile" "$targetfile" 2>&1 )"
+ else
+  result="$(
+   # report-identical-files   expand-tabs   minimal   side-by-side
+   diff -stdy --width="$dwidth" -- "$sourcefile" "$targetfile" 2>&1 )"
+ fi
+ dpret=$?
+ case "$dpret" in
+  0) padline "$clrtxt" " $fname" >> "$samefile" ;;
+  1)
+   padline "$clrsmd" " $fname" >> "$changefile"
+   espr="$reportdir"'/report_'"$fname"'.espdif'
+   [ "$mode" = 'keep' ] &&
+    printf '%s' "$result" > "$reportdir"'/raw-ystd-'"$dwidth"'_'"$fname"
+   if [ -d "$sourcefile" ]; then
+    padline "$clrbg$clrbrf" "${dspace:${#foldif}/2}$foldif" > "$espr"
+    padline "$clrsmd" " $sourcefile" >> "$espr"
+    padline "$clrtmd" " $targetfile" "
+$bgline" >> "$espr"
+   elif [ -n "$layout" ]; then
+    printf '%s' "$result" | newdif > "$espr"
+   else printf '%s' "$result" |
+    # translate first byte of variable width utf-8 char to '?'
+    # (positioning gfmt at dpos)
+    # pass ascii lf, cr, printable chars
+    # (tab '\11' expansion to spaces by diff prior)
+    # include context lines, add line numbers
+    tr '\300-\375' '?' | # -\367 16bit BMP, Plane 0 (1-3 bytes follow)
+     tr -dc '\12\15\40-\176' | # or '[:print:]\n'
+      grep -nEC"$context" -- '^.{'"$dpos"'}[<>|].*' |
+       tfixdif > "$espr" # parse filtered diff output
+   fi
+  ;;
+  2) padline "$clrmsf$clrbg" "$result" >> "$errorfile"'_' ;;
+  *)
+   printf '\nunknown return code %s\n\n  %s
+' "$dpret" "$result" >> "$unknown"
+  ;;
+ esac
+}
+
+
+newdif(){
+ # implement 'mixed' output mode
+ chg=0;add=0;del=0
+ IFS=$'\n'
+ read -r r; printf '%s\n' "$r"
+ read -r r; printf '%s\n' "$r"
+ while read -r r
+ do case "${r::1}" in
+  '@')
+   a=${r:4};
+   h=${a#*@}
+   b=${a#*+};
+   a=${a%%[, ]*};
+   b=${b%%[, ]*};
+   printf '\n%s\n' "$h"
+   new=''
+   continue
+   ;;
+  '-') # current
+   new="$new$r
+"
+   continue
+   ;;
+  '+') # previous
+    if [ -n "$new" ]; then
+     n="${new#*
+}" # chop off first line from $new buffer
+     ln="$((${#new}-${#n}-1))" # offset to end of first line
+     if [ "$ln" -le "$dpos" ]; then
+      # echo pad
+      z="${new::$ln}${bgpoly::$dpos-$ln}";
+     else
+      # echo truncate
+      z="${new::$dpos}";
+     fi
+     printf '|%s%s  %s\n' "${dplace:${#a}}$((a++))" "$z" "${r::$dpos}"
+     new="$n"; : $((chg++))
+    else
+     printf '<%s%s\n' "${dplace:${#b}}$b" "${r::$dwidth}"
+     : $((del++))
+    fi
+   ;;
+  ' ')
+   for n in $new; do
+    printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${n::$dwidth}"
+    : $((add++))
+   done
+   printf ' %s%s\n' "${dplace:${#a}}$((a++))" "${r::$dwidth}"
+   new=''
+   ;;
+  esac
+  : $((b++))
+ done
+ echo "additions $add  changes $chg  deletions $del"
+}
+
+
+tfixdif(){
+ cmpoff=''
+ srcoff=''
+ modline=''
+ while IFS='' read -r fline; do
+  if [ "$fline" = '--' ]; then
+   # separator, pad with spaces to position
+   sep="${dplace:$newlen}${dseparator: -$newlen}"
+   printf '%s\n' "$clrtxt$dspace$sep$sepspace"
+  else
+   # chop longest match from end, including colon or dash ('type')
+   number="${fline%%[:-]*}"
+   num=${#number}
+   type="${fline:$num:1}"
+   # split line in two
+   left="${fline:$num+1:$dpos-1}"
+   right="${fline:$num+1+$dpos}"
+   if [ "$type" = ':' ]; then
+   # added, deleted and changed lines
+    gfmt="${right::1}";
+    # format as appropriate to diff symbol $gfmt
+    if [ "$gfmt" = '>' ]; then
+    # removed lines reflect target file line number
+     : $(( srcoff += 1 ))
+     newnum=$(( number - cmpoff ))
+     right="$clrtgt<$clrrmv${right:1}${dspace:${#right}}$clrtgt"
+    elif [ "$gfmt" = '<' ]; then
+    # new lines reflect source line number
+     : $(( cmpoff += 1 ))
+     newnum=$(( number - srcoff ))
+     left="$clrnew$left"
+     right="$clrsrc>${right:1}${dspace:${#right}}$clrsrc"
+    else
+    # altered lines reflect source line number
+     newnum=$(( number - srcoff ))
+     left="$clrsmd$left"
+     right="$clrtmd$right${dspace:${#right}}$clrsrc"
+     : $(( modline += 1 ))
+    fi
+   else
+   # context lines, source line number
+    newnum=$(( number - srcoff ))
+    left="$clrtxt$left${dspace:${#left}+3}"
+    right="$dspace$clrsrc"
+   fi
+   # re-assemble completed line for output
+   newlen="${#newnum}"
+   right="$right${dplace:$newlen}$newnum$clrtxt$type"
+   printf '%s %s\n' "$right" "$left"
+  fi
+ done
+ # summary
+ # ' 1 lines' pattern match requires a space after =" (next three lines)
+ [ "$cmpoff" ] && cmpoff=" $cmpoff lines added  "
+ [ "$modline" ] && modline=" $modline lines modified  "
+ [ "$srcoff" ] && srcoff=" $srcoff lines removed"
+ summary="$cmpoff$modline$srcoff"
+ [ ${#targetfile} -gt "$dspclen" ] &&
+  targetfile=${targetfile: -$dspclen+1}
+ [ ${#sourcefile} -gt "$dspclen" ] &&
+  sourcefile=${sourcefile: -$dspclen+1+$even}
+ parta="$clrttl$bold$targetfile"
+ partb="${dspace:${#summary}/2}${summary// 1 lines/ 1 line}"
+ partb="$clrbrf$partb${bgpoly:${#partb}}"
+ sfmt='%s\n %s%'$(( columns - ${#targetfile} - 2 ))'s%s \n%s\n%s\n'
+ printf "$sfmt" "$bgpoly" "$parta" "$sourcefile" "$normal" "$partb" "$bgpoly"
+}
+
+
 reduce(){
  first="${absolute%%/..*}"
  while [ ${#first} -ne ${#absolute} ]
@@ -339,7 +514,9 @@ sanitize(){
   absolute="$currentdir"
   [ "$prloc" = 'parent' ] && absolute="${absolute%/*}"
  fi
- scolor="$colors"'|dcs' # permit direct-color sample in project registration
+ # permit direct-color sample in project registration
+ scolor="$colors"'|dcs'
+ # pass correctly formatted keywords, allowed chars and numeric ranges 
  regx="((context='[1-9]')"
  regx="$regx|(testdirect='(true|false)')"
  regx="$regx|((columns|lines)='[0-9]{1,4}')"
@@ -365,19 +542,34 @@ sanitize(){
      sed -r -- "$fixrel$absolute"'\2/;Te;i# fixed relative projectdir
 :e'; } > "$esprj"
  # send rejected lines to stderr
- paste -d '\n' -- "$esprj" "$esprjtmp" |
-  sed -n -- '/^$/{n;s/\(.*\)/'"$clrerr"'  \1'"$reset"'/p}' >&2
+ grep -v '^#' "$esprj" | # ignore '# fixed relative...' line
+  paste -d '\n' -- - "$esprjtmp" | # interleave
+   sed -n -- '/^$/{n;s/\(.*\)/'"$clrerr"'  \1'"$reset"'/p}' >&2
  # cleanup
  rm -f -- "$esprjtmp"
 }
 
 
+instr(){ # return true if $1 is a substring of $2, 0=true, !0=false
+ strin="${2/"$1"}"; [ "${#strin}" -ne "${#2}" ] && return 0 || return 1; }
+
+
+fixup(){ [ "${1: -1}" = '/' ] && echo "$1" || echo "$1"'/'; }
+
+
+padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
+
+
 ##  precursory arguments
 printf '%s' "$reset" # start with 'clean slate'
 case "$1" in
- '--help'|?'help'|'help') echo "$edhelp"; exit ;;
- 'skip') shift ;; # skip or include resource configuration file
+ '--help'|?'help'|'help') echo "$shelp"; exit ;;
+ 'skip') shift ;; # or include resource configuration file
  *)
+  # layout
+  if [ $1 = 'mix' ]; then layout='mixed'; shift; else layout=''
+  fi
+  # configuration
   if [ -f "$configfile" ]; then
    if [ 'unlocked' = "$mdsum" ]; then
     lock="$clrerr$mdsum$reset"
@@ -395,12 +587,6 @@ case "$1" in
   fi
  ;;
 esac
-
-
-instr(){ # return true if $1 is a substring of $2, 0=true, !0=false
- strin="${2/"$1"}"; [ "${#strin}" -ne "${#2}" ] && return 0 || return 1; }
-
-fixup(){ [ "${1: -1}" = '/' ] && echo "$1" || echo "$1"'/'; }
 
 
 ##  precursory settings
@@ -478,32 +664,39 @@ if [ "$prloc" != 'default' ]; then
  [ "$prloc" != 'failed' ] && . "$esprj"
 fi
 
+ ##  secondary settings
+ # effect potential 'columns' over-ride from registration file
+ bgp='                                                  '
+ bgpoly=''
+ x=$((columns/50))
+ while [ $((x--)) -gt 0 ]; do bgpoly="$bgpoly$bgp"; done
+ bgpoly="$bgpoly${bgp::$columns%50}"
+ #bgpoly="$( printf "%-${columns}s" )"
+ bgline="$clrbg$bgpoly"
 
-padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
-
-
-##  secondary settings
-# effect potential 'columns' over-ride from registration file
-bgpoly="$( printf "%-${columns}s" )"
-bgline="$clrbg$bgpoly"
+switch(){
+ [ -z "$1" ] && return 1
+ case "$1" in
+  'man') sman ;;
+  'make') project 'gen' ;;
+  'colors') project 'show' ;;
+  'term') mode='term' ;;
+  'page') mode='page' ;;
+  'test') mode='test' ;;
+  'keep') mode='keep'; tmpdir='' ;;
+  *) return 1
+ esac
+ return 0
+}
 
 ##  main arguments
 mode='default' # display
 state='default' # semaphore
-# allow mode argument after file/dir arguments
-[ -n "$3" ] && instr "$3" 'man make colors term page test keep' &&
- set "$3" "$1" "$2"
-case "$1" in
- 'man') edman ;;
- 'make') project 'gen' ;;
- 'colors') project 'show' ;;
- 'term') mode='term' ;;
- 'page') mode='page' ;;
- 'test') mode='test' ;;
- 'keep') mode='keep'; tmpdir='' ;;
- '--') shift ;; # end-of-options, default mode
-esac
-[ "$mode" = 'default' ] || shift # if $1 was a mode argument
+switch "$1" && shift # $1 was a mode argument
+# option bridge
+[ "$1" = '--' ] && shift  # filename can be same as options
+# third argument is considered
+[ -n "$3" ] && switch "$3"
 if [ -n "$2" ]; then # extra-project diff
  cd "$currentdir" || exit
  if [ -d "$1" ] && [ -d "$2" ]; then # compare two directories
@@ -512,7 +705,10 @@ if [ -n "$2" ]; then # extra-project diff
  elif [ -f "$1" ] && [ -f "$2" ]; then # compare two files
   state='dual'; sourcedir=''; targetdir='';
   fname="${1##*/}"; sourcefile="$1"; targetfile="$2"
+ elif [ -n "$1" ] && switch "$2"; then
+  state='single'
  else
+echo "$@   $mode"
   echo 'valid arguments are:  file1 file2  or:  dir1 dir2'
   exit
  fi
@@ -552,115 +748,9 @@ if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
   fi
  fi
 elif ! instr "$state" 'dual dir'; then
- printf 'no project paths%s' "$edhelp"
+ printf 'no project paths%s' "$shelp"
  exit
 fi
-
-
-diffproc(){
- # diff   side-by-side  report-identical-files  expand-tabs  minimal
- result="$( diff -ystd --width="$dwidth" -- "$sourcefile" "$targetfile" 2>&1 )"
- dpret=$?
- case "$dpret" in
-  0) padline "$clrtxt" " $fname" >> "$samefile" ;;
-  1)
-   padline "$clrsmd" " $fname" >> "$changefile"
-   espr="$reportdir"'/report_'"$fname"'.espdif'
-   [ "$mode" = 'keep' ] &&
-    printf '%s' "$result" > "$reportdir"'/raw-ystd-'"$dwidth"'_'"$fname"
-   if [ -d "$sourcefile" ]; then
-    padline "$clrbg$clrbrf" "${dspace:${#foldif}/2}$foldif" > "$espr"
-    padline "$clrsmd" " $sourcefile" >> "$espr"
-    padline "$clrtmd" " $targetfile" "
-$bgline" >> "$espr"
-   else
-    # translate first byte of variable width utf-8 char to '?'
-    # (positioning gfmt at dpos)
-    # pass ascii lf, cr, printable chars
-    # (tab '\11' expansion to spaces by diff prior)
-    # include context lines, add line numbers
-    printf '%s' "$result" |
-     tr '\300-\375' '?' | # -\367 16bit BMP, Plane 0 (1-3 bytes follow)
-      tr -dc '\12\15\40-\176' | # or '[:print:]\n'
-       grep -nEC"$context" -- '^.{'"$dpos"'}[<>|].*' |
-        tfixdif > "$espr" # parse filtered diff output
-   fi
-  ;;
-  2) padline "$clrmsf$clrbg" "$result" >> "$errorfile"'_' ;;
-  *)
-   printf '\nunknown return code %s\n\n  %s\n' "$dpret" "$result" >> "$unknown"
-  ;;
- esac
-}
-
-
-tfixdif(){
- cmpoff=''
- srcoff=''
- modline=''
- while IFS='' read -r fline; do
-  if [ "$fline" = '--' ]; then
-   # separator, pad with spaces to position
-   sep="${dplace:$newlen}${dseparator: -$newlen}"
-   printf '%s\n' "$clrtxt$dspace$sep$sepspace"
-  else
-   # chop longest match from end, including colon or dash ('type')
-   number="${fline%%[:-]*}"
-   num=${#number}
-   type="${fline:$num:1}"
-   # split line in two
-   left="${fline:$num+1:$dpos-1}"
-   right="${fline:$num+1+$dpos}"
-   if [ "$type" = ':' ]; then
-   # added, deleted and changed lines
-    gfmt="${right::1}";
-    # format as appropriate to diff symbol $gfmt
-    if [ "$gfmt" = '>' ]; then
-    # removed lines reflect target file line number
-     : $(( srcoff += 1 ))
-     newnum=$(( number - cmpoff ))
-     right="$clrtgt<$clrrmv${right:1}${dspace:${#right}}$clrtgt"
-    elif [ "$gfmt" = '<' ]; then
-    # new lines reflect source line number
-     : $(( cmpoff += 1 ))
-     newnum=$(( number - srcoff ))
-     left="$clrnew$left"
-     right="$clrsrc>${right:1}${dspace:${#right}}$clrsrc"
-    else
-    # altered lines reflect source line number
-     newnum=$(( number - srcoff ))
-     left="$clrsmd$left"
-     right="$clrtmd$right${dspace:${#right}}$clrsrc"
-     : $(( modline += 1 ))
-    fi
-   else
-   # context lines, source line number
-    newnum=$(( number - srcoff ))
-    left="$clrtxt$left${dspace:${#left}+3}"
-    right="$dspace$clrsrc"
-   fi
-   # re-assemble completed line for output
-   newlen="${#newnum}"
-   right="$right${dplace:$newlen}$newnum$clrtxt$type"
-   printf '%s %s\n' "$right" "$left"
-  fi
- done
- # summary
- # ' 1 lines' pattern match requires a space after =" (next three lines)
- [ "$cmpoff" ] && cmpoff=" $cmpoff lines added  "
- [ "$modline" ] && modline=" $modline lines modified  "
- [ "$srcoff" ] && srcoff=" $srcoff lines removed"
- summary="$cmpoff$modline$srcoff"
- [ ${#targetfile} -gt "$dspclen" ] &&
-  targetfile=${targetfile: -$dspclen+1}
- [ ${#sourcefile} -gt "$dspclen" ] &&
-  sourcefile=${sourcefile: -$dspclen+1+$even}
- parta="$clrttl$bold$targetfile"
- partb="${dspace:${#summary}/2}${summary// 1 lines/ 1 line}"
- partb="$clrbrf$partb${bgpoly:${#partb}}"
- sfmt='%s\n %s%'$(( columns - ${#targetfile} - 2 ))'s%s \n%s\n%s\n'
- printf "$sfmt" "$bgpoly" "$parta" "$sourcefile" "$normal" "$partb" "$bgpoly"
-}
 
 
 supreport(){
@@ -684,17 +774,17 @@ $mdiff"
  rm -f -- "$supsrc" "$suptgt"
 }
 
+
 mainloop(){
  # queue files for diff comparison, govern spawn limit
  dpl=0
- foldif='sub-folder contents differ'
  for sourcefile in "$sourcedir"$glob; do
   # posix glob empty set yields literal match string
   if [ -e "$sourcefile" ]; then # ensure result exists
    # launch up to $dproclimit processes in the background
    if [ $(( dpl += 1 )) -ge "$dproclimit" ]; then # one at a time
     [ "$mode" = 'test' ] && printf '%s\n' "wait $sourcefile"
-    wait -n  # wait for any job to complete
+    wait -n # wait for any job to complete
    fi
   else
    echo 'no source files '"$sourcefile" &&
@@ -702,7 +792,7 @@ mainloop(){
   fi
   fname="${sourcefile##*/}"
   targetfile="$targetdir$fname"
-  diffproc &  # process diff results
+  diffproc & # process diff results
  done
 }
 
@@ -724,15 +814,19 @@ dspace="${bgpoly::$dspclen}"
 # spacing to fill separator lines
 sepspace="${dspace:1}"
 
-##  setup temp folder, exit trap handles removal
-texit(){ [ -n "$reportdir" ] &&
- [ "$mode" = 'keep' ] ||
-  rm -rf -- "$reportdir";
-}
+##  temp folder
+# exit trap handles removal
+texit(){  [ "$mode" = 'keep' ] || {
+  [ -n "$reportdir" ] && rm -rf -- "$reportdir"
+  [ -n "$reportnew" ] && rm -rf -- "$reportnew"; } }
 unset reportdir
 trap texit EXIT
 reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
  { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
+
+# compare engine outputs 
+#reportnew="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
+# { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
 
 ##  assign brief names
 unknown="$reportdir"'/_000_unknown_'
@@ -744,10 +838,13 @@ samefile="$reportdir"'/_004_same'
 ##  sort order
 export LC_ALL=C
 
-##  main - initiate diff reports
+##  main
+foldif='sub-folder contents differ'
+dopts='-stdU'"$context"
+# initiate diff reports
 if [ "$state" = 'dual' ]; then
  # directly dispatch extra-project 'file' runs
- diffproc;
+ diffproc
 else
  instr "$state" 'default dir' &&
   supreport "$sourcedir" "$targetdir" > "$missfile" &
@@ -761,7 +858,8 @@ wait # for reporting sub-processes to finish
 # core time test exits here
 [ "$mode" = 'test' ] && exit
 
-##  post-processing
+
+###  post-processing
 
 
 finish(){
@@ -804,6 +902,7 @@ for final in "$reportdir"/*.espdif
 do
  [ -f "$final" ] && { # skip loop if no reports
   tfx="$final"'_tfx'
+  [ -n "$layout" ] && mv "$final" "$tfx" && continue # pass-through 'mixed'
   tail -n 4 -- "$final" | {
    IFS=''; read -r fif; read -r line; read -r swap
    instr "$foldif" "$fif" || # temp bypass subfolder content reports
@@ -898,9 +997,10 @@ exit
 #    decimal  0, 95, 135, 175, 215, 255  (00, 5f, 87, af, d7, ff hex)
 #   232-255 greyscale - 24 shades,  8+(10*shade),  8;8;8m - 238;238;238m
 
-##  busybox ~ 2X bash (twice as fast)
+##  busybox
 # wget security patch did not apply to busybox-1.32.1:
-# https://git.busybox.net/busybox/commit/?id=fc2ce04a38ebfb03f9aeff205979786839cd5a7c
+#  https://git.busybox.net/busybox/commit/
+#  ?id=fc2ce04a38ebfb03f9aeff205979786839cd5a7c
 # if this is of concern, compile the most recent commit of busybox-1.33_stable
 # 
 #    if busybox is the default system shell:
