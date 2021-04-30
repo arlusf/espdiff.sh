@@ -1,5 +1,6 @@
 #!/home/busybox-1.32.1/busybox sh
 #!/bin/bash
+#!/bin/zsh
 
 # Copyright (c) April 5th, 2021 arlusf@github, all rights reserved
 # this version does not offer any license agreement
@@ -112,7 +113,7 @@ $shelp
 #      ../.esprj  $(found '../.esprj')
 #      session $sessiondir.esprj  $(found "$esprj")
 #
-##  to view the current register, invoke espdiff.sh with  ' make '
+##  to view the session register, invoke espdiff.sh with  ' make '
 #
 #    registration files are sanitized for allowed and correct sequences
 #    path and color names are restricted to the following characters:
@@ -194,13 +195,13 @@ reset=$csi'0m'
 normal=$csi'22m' # not bold, not faint
 reverse=$csi'7m'
 
+bgc=$csi'48;5;' # background 256color
 fgc=$csi'38;5;' # CSI + set foreground indexed-color
 fdc=$csi'38;2;' # foreground direct-color sequence
-# relict form: '\e[38:2::R:G:Bm' ITU-T Recommendation T.416, aka ISO/IEC 8613-6
-# color-space is to be specified within the consecutive double colon syntax
-# (future use... color-space, tolerance, alpha?)
 bdc=$csi'48;2;' # background direct-color
-bgc=$csi'48;5;' # background 256color
+# relict form: '\e[38:2::R:G:Bm'
+# ( :: future use... color-space, tolerance, alpha?)
+# (ITU-T Recommendation T.416, aka ISO/IEC 8613-6)
 
 # default colors, 256color index
 # 'gfmt' diff symbol  <|>
@@ -240,7 +241,7 @@ project(){
  else # 'show'
   printf '%b\n' "$bgline"
   ascii='AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz 0123456789'
-  ascii="${ascii::${#bgpoly}}" # truncate
+  ascii="${ascii:0:${#bgpoly}}" # truncate
   aspace="${bgpoly:${#ascii}}" # pad
   ascii="$ascii$aspace"
   sample="
@@ -250,7 +251,10 @@ $bgpoly$reset
 $bgline"
  fi
  if [ -n "$xnam" ]; then # 256color names from configuration file
-  x=-1; IFS=','; for b in $xnam; do eval "xnam$(( x += 1 ))=$b"; done
+# setopt SH_WORD_SPLIT, zsh -y or use (s) flag instead of IFS:
+#  if [ -n "$zsh" ]; then
+#   x=0; for b in ${(s.,.)xnam}; do eval "xnam$((x++))=$b"; done
+  x=0; IFS=,; for b in $xnam; do eval "xnam$((x++))=$b"; done
   #! eval can be dangerous... but so is ${!var}
  fi
  IFS=\|
@@ -262,17 +266,17 @@ $bgline"
   cidx="${colr:7:-1}"
   cidx="${cidx#"${cidx%%[!0]*}"}" # strip leading zeros
   : "${cidx:=0}" # do not leave $cidx empty
-  if [ "${colr::${#fgc}}" = "$fgc" ]; then
+  if [ "${colr:0:${#fgc}}" = "$fgc" ]; then
    # $colr begins with '$fgc'
    key='$fgc'
    eval "nam=\"\$xnam$cidx\""
    # $fgc and $bgc sequences use configured names
-  elif [ "${colr::${#bgc}}" = "$bgc" ]; then
+  elif [ "${colr:0:${#bgc}}" = "$bgc" ]; then
    key='$bgc'
    eval "nam=\"\$xnam$cidx\""
   else
    eval "nam=\"\$$nam\""
-   [ "${colr::${#fdc}}" = "$fdc" ] && key='$fdc' || key='$bdc'
+   [ "${colr:0:${#fdc}}" = "$fdc" ] && key='$fdc' || key='$bdc'
   fi
   : "${nam:='unnamed'}"
   eval "typ=\$$typ"
@@ -367,7 +371,7 @@ newdif(){
  read -r r; printf '%s\n' "$r"
  read -r r; printf '%s\n' "$r"
  while read -r r
- do case "${r::1}" in
+ do case "${r:0:1}" in
   '@')
    a=${r:4};
    h=${a#*@}
@@ -390,24 +394,24 @@ newdif(){
      ln="$((${#new}-${#n}-1))" # offset to end of first line
      if [ "$ln" -le "$dpos" ]; then
       # echo pad
-      z="${new::$ln}${bgpoly::$dpos-$ln}";
+      z="${new:0:$ln}${bgpoly:0:$dpos-$ln}";
      else
       # echo truncate
-      z="${new::$dpos}";
+      z="${new:0:$dpos}";
      fi
-     printf '|%s%s  %s\n' "${dplace:${#a}}$((a++))" "$z" "${r::$dpos}"
+     printf '|%s%s  %s\n' "${dplace:${#a}}$((a++))" "$z" "${r:0:$dpos}"
      new="$n"; : $((chg++))
     else
-     printf '<%s%s\n' "${dplace:${#b}}$b" "${r::$dwidth}"
+     printf '<%s%s\n' "${dplace:${#b}}$b" "${r:0:$dwidth}"
      : $((del++))
     fi
    ;;
   ' ')
    for n in $new; do
-    printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${n::$dwidth}"
+    printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${n:0:$dwidth}"
     : $((add++))
    done
-   printf ' %s%s\n' "${dplace:${#a}}$((a++))" "${r::$dwidth}"
+   printf ' %s%s\n' "${dplace:${#a}}$((a++))" "${r:0:$dwidth}"
    new=''
    ;;
   esac
@@ -436,7 +440,7 @@ tfixdif(){
    right="${fline:$num+1+$dpos}"
    if [ "$type" = ':' ]; then
    # added, deleted and changed lines
-    gfmt="${right::1}";
+    gfmt="${right:0:1}";
     # format as appropriate to diff symbol $gfmt
     if [ "$gfmt" = '>' ]; then
     # removed lines reflect target file line number
@@ -487,15 +491,15 @@ tfixdif(){
 
 
 reduce(){
- first="${absolute%%/..*}"
- while [ ${#first} -ne ${#absolute} ]
+ one="${abs%%/..*}"
+ while [ ${#one} -ne ${#abs} ]
  do
-  second="${absolute:${#first}+3}"
-  first="${first%/*}"
-  absolute="$first$second"
-  first="${absolute%%/..*}"
+  two="${abs:${#one}+3}"
+  one="${one%/*}"
+  abs="$one$two"
+  one="${abs%%/..*}"
  done
- : "${absolute:=/}"
+ : "${abs:=/}"
 }
 
 
@@ -503,16 +507,16 @@ sanitize(){
  esprjtmp="$esprj"'tmp'
  if [ "$1" ]; then
   regfile="$1"
-  if [ ${1::1} = '/' ]; then
-   absolute="${1%/*}"
+  if [ ${1:0:1} = '/' ]; then
+   abs="${1%/*}"
   else
-   absolute="$currentdir/${1%/*}"
+   abs="$currentdir/${1%/*}"
    reduce #'/dir/..' sequences recursively
   fi
  else
   regfile='.esprj'
-  absolute="$currentdir"
-  [ "$prloc" = 'parent' ] && absolute="${absolute%/*}"
+  abs="$currentdir"
+  [ "$prloc" = 'parent' ] && abs="${abs%/*}"
  fi
  # permit direct-color sample in project registration
  scolor="$colors"'|dcs'
@@ -536,10 +540,10 @@ sanitize(){
 :e' | {
      # escape forward slashes in path
      # (not restricting use of any filename chars to delimit sed)
-     absolute="${absolute//\//\\/}"'\/'
+     abs="${abs//\//\\/}"'\/'
      # fix relative projectdir in session registration file
      fixrel="s/(projectdir=')([^/][^']*')/\1"
-     sed -r -- "$fixrel$absolute"'\2/;Te;i# fixed relative projectdir
+     sed -r -- "$fixrel$abs"'\2/;Te;i# fixed relative projectdir
 :e'; } > "$esprj"
  # send rejected lines to stderr
  grep -v '^#' "$esprj" | # ignore '# fixed relative...' line
@@ -559,6 +563,11 @@ fixup(){ [ "${1: -1}" = '/' ] && echo "$1" || echo "$1"'/'; }
 
 padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
 
+## detect zsh
+zsh=''
+shell="$(cat /proc/$$/cmdline | tr -d '\0')"
+instr 'zsh' "$shell" && zsh='true'
+[ -n "$zsh" ] && setopt SH_WORD_SPLIT
 
 ##  precursory arguments
 printf '%s' "$reset" # start with 'clean slate'
@@ -566,8 +575,8 @@ case "$1" in
  '--help'|?'help'|'help') echo "$shelp"; exit ;;
  'skip') shift ;; # or include resource configuration file
  *)
-  # layout
-  if [ $1 = 'mix' ]; then layout='mixed'; shift; else layout=''
+  if [ "$1" = 'mix' ]; then layout='mixed'; shift
+  else layout='' # default
   fi
   # configuration
   if [ -f "$configfile" ]; then
@@ -587,7 +596,6 @@ case "$1" in
   fi
  ;;
 esac
-
 
 ##  precursory settings
 readonly currentdir="$( pwd )"
@@ -664,15 +672,14 @@ if [ "$prloc" != 'default' ]; then
  [ "$prloc" != 'failed' ] && . "$esprj"
 fi
 
- ##  secondary settings
- # effect potential 'columns' over-ride from registration file
- bgp='                                                  '
- bgpoly=''
- x=$((columns/50))
- while [ $((x--)) -gt 0 ]; do bgpoly="$bgpoly$bgp"; done
- bgpoly="$bgpoly${bgp::$columns%50}"
- #bgpoly="$( printf "%-${columns}s" )"
- bgline="$clrbg$bgpoly"
+##  secondary settings
+# effect potential 'columns' over-ride from registration file
+bgpoly=''; x=$((columns/50))
+bgp='                                                  ';
+while [ $((x--)) -gt 0 ]; do bgpoly="$bgpoly$bgp"; done
+bgpoly="$bgpoly${bgp:0:$columns%50}" # :0: for zsh
+#bgpoly="$( printf "%-${columns}s" )"
+bgline="$clrbg$bgpoly"
 
 switch(){
  [ -z "$1" ] && return 1
@@ -708,7 +715,6 @@ if [ -n "$2" ]; then # extra-project diff
  elif [ -n "$1" ] && switch "$2"; then
   state='single'
  else
-echo "$@   $mode"
   echo 'valid arguments are:  file1 file2  or:  dir1 dir2'
   exit
  fi
@@ -716,8 +722,9 @@ elif [ -n "$1" ]; then  # compare one project file
  state='single'
 fi
 
-# validate inputs
+## validate inputs
 if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
+ # check directories
  projectdir="$( fixup "$projectdir" )"
  sourcedir="$( fixup "$sourcedir" )"
  targetdir="$( fixup "$targetdir" )"
@@ -728,8 +735,10 @@ if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
   { echo 'invalid sourcedir '"$projectdir$sourcedir"; exit; }
  [ -d "$targetdir" ] ||
   { echo 'invalid targetdir '"$projectdir$targetdir"; exit; }
+ # 'inline' project register location
  [ "$prloc" = 'default' ] &&
   echo 'inline registration'
+ # single sub-states
  if [ "$state" = 'single' ]; then
   sproj="$projectdir$sourcedir$1"
   if [ -d "$projectdir$1" ]; then # compare specified project folder
@@ -739,11 +748,12 @@ if [ -n "$sourcedir" ] && [ -n "$targetdir" ] && [ -n "$projectdir" ]; then
    sourcedir="$sourcedir$1"
    glob=''
   else
-   [ '?' != "$1" ] && help="or 'help'" &&
-    notfile='not a project file: '"$clrerr$sproj$reset"
-   echo "$notfile" # blank line or 'not a project file'
+   notf=''; clue=''
+   [ '?' != "$1" ] && clue="or 'help'" &&
+    notf='not a project file: '"$clrerr$sproj$reset"
+   echo "$notf" # blank line or 'not a project file'
    ls --color=always -- "$projectdir$sourcedir"
-   echo "$help" # blank line or 'help'
+   echo "$clue" # blank line or 'help'
    exit
   fi
  fi
@@ -775,25 +785,32 @@ $mdiff"
 }
 
 
-mainloop(){
- # queue files for diff comparison, govern spawn limit
- dpl=0
- for sourcefile in "$sourcedir"$glob; do
-  # posix glob empty set yields literal match string
+doloop(){
   if [ -e "$sourcefile" ]; then # ensure result exists
+  # posix glob empty set yields literal match string
    # launch up to $dproclimit processes in the background
    if [ $(( dpl += 1 )) -ge "$dproclimit" ]; then # one at a time
     [ "$mode" = 'test' ] && printf '%s\n' "wait $sourcefile"
-    wait -n # wait for any job to complete
-   fi
+    [ -n "$(jobs)" ] && wait %1 # wait for job to complete
+    fi
   else
-   echo 'no source files '"$sourcefile" &&
+   echo 'no source files '"$(pwd)/$sourcefile"
    exit
   fi
   fname="${sourcefile##*/}"
   targetfile="$targetdir$fname"
   diffproc & # process diff results
- done
+}
+
+
+mainloop(){
+ # queue files for diff comparison
+ dpl=0
+ if [ -n "$zsh" ]; then
+  for sourcefile in "$sourcedir"$~glob; do doloop; done
+ else  # bash, busybox
+  for sourcefile in "$sourcedir"$glob; do doloop; done
+ fi 
 }
 
 
@@ -810,7 +827,7 @@ dwidth=$(( columns - nmax - 2 ))
 dpos=$(( dwidth/2 - 1 + even )) # midpoint of diff -y
 # left field ~ half the columns
 dspclen=$(( dpos + 2 ))
-dspace="${bgpoly::$dspclen}"
+dspace="${bgpoly:0:$dspclen}"
 # spacing to fill separator lines
 sepspace="${dspace:1}"
 
@@ -876,9 +893,9 @@ finish(){
 
 # prepare brief section labels
 brf="$reportdir"'/_0_brief'
-# missing files section is prepped in 'initiate diff reports'
 padline "$bgline
 $clrbrf" 'Errors' > "$errorfile"
+# missing-files section is prepped in 'initiate diff reports'
 padline "$bgline
 $clrbrf" 'Different' > "$changefile"'_'
 padline "$bgline
@@ -918,7 +935,7 @@ done
 [ "$mode" = 'keep' ] && exit
 
 # remove intermediate report files
-rm -f -- "$reportdir"/*.espdif
+[ -z "$layout" ] && rm -f -- "$reportdir"/*.espdif
 
 # paint empty bottom lines of initial page with background color
 if [ $mode = 'page' ]; then
