@@ -161,10 +161,7 @@ exit
 ###   system options
 umask 066 # user only permissions for new files
 # maximum number of simultaneous diff processes (main loop)
-dproclimit=1
-
-# use external link instead of busybox builtins
-#alias diff="$( which diff )" # -y option
+dproclimit=3
 
 ###   project options
 context=1 #  lines of leading and tailing context
@@ -257,8 +254,11 @@ $reverse$bgpoly
 $bgpoly$reset
 $bgline"
  fi
- if [ -n "$xnam" ]; then # 256color names from configuration file
-  x=0; IFS=,; zsplit "$xnam" 'xname'
+ if [ -n "$xnam" ]; then
+ # 256color names from configuration file
+  x=0
+  IFS=,
+  zsplit "$xnam" 'xname'
  fi
  IFS=\|
  zsplit "$colors" 'pcolor' "$1"
@@ -270,10 +270,10 @@ $bgline"
  exit
 }
 
-xname(){ eval "xnam$((x++))=$2"; } #! eval and ${!var} can be dangerous!
+xname(){ eval "xnam$((x++))=$1"; } #! eval and ${!var} can be dangerous!
 
 pcolor(){
-  color='clr'"$2"
+  color='clr'"$1"
   typ='typ_'"$color"
   nam='nam_'"$color"
   eval "colr=\$$color"
@@ -294,7 +294,7 @@ pcolor(){
   fi
   : "${nam:='unnamed'}"
   eval "typ=\$$typ"
-  if [ "$1" = 'gen' ]; then
+  if [ "$2" = 'gen' ]; then
    [ "$color" = 'clrbg' ] && fcol='' || fcol=$colr
    if instr "$key" '$fdc $bdc'; then
     printf '%snam_%s\n' "$fcol" "$color='$nam'"
@@ -367,7 +367,17 @@ $bgline" >> "$espr"
 ' "$dpret" "$result" >> "$unknown"
   ;;
  esac
+ # flush fifo, no hang if empty pipe
+ dd if="$dfifo" iflag=nonblock of=/dev/null 2&>1 > /dev/null 
+ [ "$mode" = 'test' ] && {
+  sleep 1 # comment for speed test
+  echo '
+ ping fifo'
+ }
+ # notification that diffproc has completed
+ echo "$sourcefile" > "$dfifo" # not right after dd line
 }
+
 
 newdif(){
  # implement 'mixed' output mode
@@ -412,10 +422,8 @@ newdif(){
     fi
    ;;
   ' ')
-   for n in $new; do
-    printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${n:0:$dwidth}"
-    : $((add++))
-   done
+   # zsh produces extra line with '\n' at end of $new
+   [ -n "$new" ] && zsplit "${new:0:-1}" 'nlines'
    printf ' %s%s\n' "${dplace:${#a}}$((a++))" "${r:0:$dwidth}"
    new=''
    ;;
@@ -424,6 +432,12 @@ newdif(){
  done
  echo "additions $add  changes $chg  deletions $del"
 }
+
+nlines(){
+    printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${1:0:$dwidth}"
+    : $((add++))
+}
+
 
 tfixdif(){
  cmpoff=''
@@ -501,6 +515,7 @@ fixup(){ [ "${1: -1}" = '/' ] && echo "$1" || echo "$1"'/'; }
 
 padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
 
+
 zglob(){
 # $~var
  if [ -n "$zsh" ]; then
@@ -513,9 +528,9 @@ zglob(){
 zsplit(){
 # setopt SH_WORD_SPLIT, zsh -y, $=var or use (s) flag instead of IFS
  if [ -n "$zsh" ]; then
-  for c in "$=1"; do "$2" "$3" "$c"; done # or ${(s.,.)$1}
+  for c in "$=1"; do "$2" "$c" "$3"; done # or ${(s.,.)$1}
  else
-  for c in $1; do "$2" "$3" "$c"; done
+  for c in $1; do "$2" "$c" "$3"; done
  fi
 }
 
@@ -606,25 +621,38 @@ $mdiff"
 
 mainloop(){
  sourcefile="$1"
- if [ -e "$sourcefile" ]; then # ensure result exists
+ waitmsg='
+'
  # posix glob empty set yields literal match string
+ if [ -e "$sourcefile" ]; then # ensure result exists
   # launch up to $dproclimit processes in the background
-  if [ $((dpl++)) -ge "$dproclimit" ]; then # one at a time
-   [ "$mode" = 'test' ] && printf '%s\n' "wait $sourcefile"
-   djobs="$(jobs)"
-   if [ -n "$djobs" ]; then
-    djobs="${djobs%%$b*}"; djobs=${djobs%%]*}
-    echo "wait %$djobs"
-    wait "%${djobs:1}" # wait for earliest job to finish
+  waitmsg="dpl $dpl"
+  [ "$((dpl++))" -ge "$dproclimit" ] && { # one at a time
+   # pstree $$ | grep -v '\(grep\|pstree\)'
+   numdiffs="$(ps --ppid "$$" )"
+   waitmsg="$waitmsg
+$numdiffs"
+   numdiffs="$(($(echo "$numdiffs" | wc -l)-2))"
+   waitmsg="$waitmsg
+numdiff $numdiffs
+"
+   if [ "$numdiffs" -lt "$dproclimit" ]; then
+    dpl="$numdiffs"
+    waitmsg="$waitmsg"' no'
+   else
+    read < "$dfifo" # wait for any diffproc to finish
    fi
-  else [ "$mode" = 'test' ] && echo "$sourcefile"
-  fi
+   waitmsg="$waitmsg"' wait'
+  }
+  waitmsg="$waitmsg $sourcefile"
  else
   echo 'no source files '"$(pwd)/$sourcefile"
   exit
  fi
  fname="${sourcefile##*/}"
  targetfile="$targetdir$fname"
+ [ "$mode" = 'test' ] && [ -n "$waitmsg" ] && 
+  printf '\n%s\ndiffproc %s\n' "$waitmsg" "$targetfile"
  diffproc & # process diff results
 }
 
@@ -634,7 +662,8 @@ mainloop(){
 ##  detect zsh
 zsh=''
 shell="$(cat /proc/$$/cmdline | tr -d '\0')"
-instr 'zsh' "$shell" && zsh='true' && setopt +o nomatch # don't complain
+# disable zsh error on glob pattern no match
+instr 'zsh' "$shell" && zsh='true' && setopt +o nomatch
 
 ##  precursory arguments
 printf '%s' "$reset" # start with 'clean slate'
@@ -745,7 +774,6 @@ bgpoly=''; x=$((columns/50))
 bgp='                                                  ';
 while [ $((x--)) -gt 0 ]; do bgpoly="$bgpoly$bgp"; done
 bgpoly="$bgpoly${bgp:0:$columns%50}"
-#bgpoly="$( printf "%-${columns}s" )"
 bgline="$clrbg$bgpoly"
 
 switch(){
@@ -770,7 +798,8 @@ switch "$1" && shift # $1 was a mode argument
 # option bridge
 [ "$1" = '--' ] && shift  # filename can be same as options
 # third argument is considered
-[ -n "$3" ] && switch "$3"
+[ -n "$4" ] && echo 'more than one extra argument'
+[ -n "$3" ] && { switch "$3" || echo 'extra argument unrecognized: '"$3 $#"; }
 if [ -n "$2" ]; then # extra-project diff
  cd "$currentdir" || exit
  if [ -d "$1" ] && [ -d "$2" ]; then # compare two directories
@@ -855,6 +884,8 @@ unset reportdir
 trap texit EXIT
 reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
  { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
+dfifo=$reportdir'/FIFO'
+mkfifo "$dfifo"
 
 # compare engine outputs 
 #reportnew="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
@@ -874,26 +905,34 @@ export LC_ALL=C
 dopts='-stdU'"$context"
 foldif='sub-folder contents differ'
 if [ "$state" = 'dual' ]; then
- # directly dispatch extra-project 'file' runs
- diffproc
+# directly dispatch extra-project 'file' runs
+ diffproc &
 else
 # single-project, default-project and extra-project 'dir' runs
  # supplemental report for default-project and extra-project 'dir'
  instr "$state" 'default dir' &&
   supreport "$sourcedir" "$targetdir" > "$missfile" &
  # queue files for diff comparison
- dpl=0
- zglob "$sourcedir" "$glob" 'mainloop'
+ dpl=1; zglob "$sourcedir" "$glob" 'mainloop'
 fi
 
-wait # for reporting sub-processes to finish
+# wait for reporting sub-processes to finish
+[ "$mode" = 'test' ] && { echo "
+$(ps --ppid "$$")"; jobs -lr; }
+# figure out how many diffprocs to wait for
+while IFS=$'\n' [ "$(($(
+  ps --ppid "$$" | grep -v 'defunct' | wc -l
+ )-2))" -gt 0 ]; do # or implement signals
+ read line < "$dfifo"
+ [ "$mode" = 'test' ] &&
+  printf "completed %s\n" "$line"
+done
 
-# core time test exits here
+# core test exits here
 [ "$mode" = 'test' ] && exit
-
+rm "$dfifo"
 
 ###   post-processing
-
 
 finish(){
  # fill bottom of file given with lines of spaces, minus offset argument
@@ -933,7 +972,7 @@ statistics(){
  final="$1"
  [ -f "$final" ] && { # skip loop if no reports
   tfx="$final"'_tfx'
-  [ -n "$layout" ] && mv "$final" "$tfx" && continue # pass-through 'mixed'
+  [ -n "$layout" ] && mv "$final" "$tfx" && return # pass-through 'mixed'
   tail -n 4 -- "$final" | {
    IFS=''; read -r fif; read -r line; read -r swap
    instr "$foldif" "$fif" || # temp bypass subfolder content reports
