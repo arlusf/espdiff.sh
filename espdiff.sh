@@ -161,10 +161,7 @@ exit
 ###   system options
 umask 066 # user only permissions for new files
 # maximum number of simultaneous diff processes (main loop)
-dproclimit=1
-
-# use external link instead of busybox builtins
-#alias diff="$( which diff )" # -y option
+dproclimit=3
 
 ###   project options
 context=1 #  lines of leading and tailing context
@@ -232,6 +229,7 @@ nam_clrdcs='darker gray' # 24bit color names are user specified
 # 256color index to X11R4 name is sourced from configuration file
 
 
+
 project(){
  # generate a registration file or show color swatches
  [ "$testdirect" = true ] && colors="$colors"'|dcs'
@@ -257,8 +255,11 @@ $reverse$bgpoly
 $bgpoly$reset
 $bgline"
  fi
- if [ -n "$xnam" ]; then # 256color names from configuration file
-  x=0; IFS=,; zsplit "$xnam" 'xname'
+ if [ -n "$xnam" ]; then
+ # 256color names from configuration file
+  x=0
+  IFS=,
+  zsplit "$xnam" 'xname'
  fi
  IFS=\|
  zsplit "$colors" 'pcolor' "$1"
@@ -270,10 +271,10 @@ $bgline"
  exit
 }
 
-xname(){ eval "xnam$((x++))=$2"; } #! eval and ${!var} can be dangerous!
+xname(){ eval "xnam$((x++))=$1"; } #! eval and ${!var} can be dangerous!
 
 pcolor(){
-  color='clr'"$2"
+  color='clr'"$1"
   typ='typ_'"$color"
   nam='nam_'"$color"
   eval "colr=\$$color"
@@ -294,7 +295,7 @@ pcolor(){
   fi
   : "${nam:='unnamed'}"
   eval "typ=\$$typ"
-  if [ "$1" = 'gen' ]; then
+  if [ "$2" = 'gen' ]; then
    [ "$color" = 'clrbg' ] && fcol='' || fcol=$colr
    if instr "$key" '$fdc $bdc'; then
     printf '%snam_%s\n' "$fcol" "$color='$nam'"
@@ -367,7 +368,12 @@ $bgline" >> "$espr"
 ' "$dpret" "$result" >> "$unknown"
   ;;
  esac
+ [ -n "$sequence" ] && sleep "$sequence"
+ # notification that diffproc has completed
+ [ "$mode" = 'test' ] && echo $'\n'"ping fifo $sourcefile"
+ echo "$sourcefile" > "$dfifo"
 }
+
 
 newdif(){
  # implement 'mixed' output mode
@@ -412,10 +418,8 @@ newdif(){
     fi
    ;;
   ' ')
-   for n in $new; do
-    printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${n:0:$dwidth}"
-    : $((add++))
-   done
+   # zsh produces extra line with '\n' at end of $new
+   [ -n "$new" ] && zsplit "${new:0:-1}" 'nlines'
    printf ' %s%s\n' "${dplace:${#a}}$((a++))" "${r:0:$dwidth}"
    new=''
    ;;
@@ -424,6 +428,12 @@ newdif(){
  done
  echo "additions $add  changes $chg  deletions $del"
 }
+
+nlines(){
+ printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${1:0:$dwidth}"
+ : $((add++))
+}
+
 
 tfixdif(){
  cmpoff=''
@@ -501,9 +511,10 @@ fixup(){ [ "${1: -1}" = '/' ] && echo "$1" || echo "$1"'/'; }
 
 padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
 
+
 zglob(){
 # $~var
- if [ -n "$zsh" ]; then
+ if [ -n "$ZSH_VERSION" ]; then
   for c in "$1"$~2; do "$3" "$c"; done
  else
   for c in "$1"$2; do "$3" "$c"; done
@@ -512,10 +523,10 @@ zglob(){
 
 zsplit(){
 # setopt SH_WORD_SPLIT, zsh -y, $=var or use (s) flag instead of IFS
- if [ -n "$zsh" ]; then
-  for c in "$=1"; do "$2" "$3" "$c"; done # or ${(s.,.)$1}
+ if [ -n "$ZSH_VERSION" ]; then
+  for c in "$=1"; do "$2" "$c" "$3"; done # or ${(s.,.)$1}
  else
-  for c in $1; do "$2" "$3" "$c"; done
+  for c in $1; do "$2" "$c" "$3"; done
  fi
 }
 
@@ -606,35 +617,52 @@ $mdiff"
 
 mainloop(){
  sourcefile="$1"
- if [ -e "$sourcefile" ]; then # ensure result exists
+ fdp=''
  # posix glob empty set yields literal match string
+ if [ -e "$sourcefile" ]; then # ensure result exists
   # launch up to $dproclimit processes in the background
-  if [ $((dpl++)) -ge "$dproclimit" ]; then # one at a time
-   [ "$mode" = 'test' ] && printf '%s\n' "wait $sourcefile"
-   djobs="$(jobs)"
-   if [ -n "$djobs" ]; then
-    djobs="${djobs%%$b*}"; djobs=${djobs%%]*}
-    echo "wait %$djobs"
-    wait "%${djobs:1}" # wait for earliest job to finish
+  waitmsg="dpl $dpl"
+  [ "$((dpl++))" -gt "$dproclimit" ] && { # one at a time
+   # pstree $$ | grep -v '\(grep\|pstree\)'
+   # flush fifo, no hang if empty pipe
+   dflush="$(dd if="$dfifo" iflag=nonblock of=/dev/null 2>&1)"
+   [ -n "$sequence" ] && waitmsg="$waitmsg
+dd flush fifo
+$dflush"
+   numdiffs="$(ps --ppid "$$" | grep -v 'defunct\|ps)')"
+   waitmsg="$waitmsg
+$numdiffs"
+   numdiffs="$(($(echo "$numdiffs" | wc -l)-2))"
+   waitmsg="$waitmsg
+numdiff $numdiffs"
+   if [ "$numdiffs" -lt "$dproclimit" ]; then
+    dpl="$((numdiffs+2))"
+    waitmsg="$waitmsg
+dpl $((numdiffs+1))"
+   else
+    [ "$mode" = 'test' ] && echo $'\n''wait'
+    read fdp < "$dfifo" # wait for any diffproc to finish
+    fdp="fifo $fdp"$'\n'
    fi
-  else [ "$mode" = 'test' ] && echo "$sourcefile"
-  fi
+  }
  else
   echo 'no source files '"$(pwd)/$sourcefile"
   exit
  fi
+ # process diff results
  fname="${sourcefile##*/}"
  targetfile="$targetdir$fname"
- diffproc & # process diff results
+ diffproc &
+ dpid="$!"
+ [ "$mode" = 'test' ] &&
+  printf '\n%s\n%sdiffproc %s %s\n' "$waitmsg" "$fdp" "$sourcefile" "$dpid"
 }
 
 
-### main
-
 ##  detect zsh
-zsh=''
-shell="$(cat /proc/$$/cmdline | tr -d '\0')"
-instr 'zsh' "$shell" && zsh='true' && setopt +o nomatch # don't complain
+# disable zsh error on glob match returning empty-set
+# (result is tested in-script)
+[ -n "$ZSH_VERSION" ] && setopt +o nomatch
 
 ##  precursory arguments
 printf '%s' "$reset" # start with 'clean slate'
@@ -745,8 +773,9 @@ bgpoly=''; x=$((columns/50))
 bgp='                                                  ';
 while [ $((x--)) -gt 0 ]; do bgpoly="$bgpoly$bgp"; done
 bgpoly="$bgpoly${bgp:0:$columns%50}"
-#bgpoly="$( printf "%-${columns}s" )"
 bgline="$clrbg$bgpoly"
+
+
 
 switch(){
  [ -z "$1" ] && return 1
@@ -757,20 +786,26 @@ switch(){
   'term') mode='term' ;;
   'page') mode='page' ;;
   'test') mode='test' ;;
+  'seq') mode='test'; sequence=1 ;;
   'keep') mode='keep'; tmpdir='' ;;
   *) return 1
  esac
  return 0
 }
 
+
+### main
+
 ##  main arguments
 mode='default' # display
 state='default' # semaphore
+sequence='' # extended test mode
 switch "$1" && shift # $1 was a mode argument
 # option bridge
 [ "$1" = '--' ] && shift  # filename can be same as options
 # third argument is considered
-[ -n "$3" ] && switch "$3"
+[ -n "$4" ] && echo 'more than one extra argument'
+[ -n "$3" ] && { switch "$3" || echo 'extra argument unrecognized: '"$3 $#"; }
 if [ -n "$2" ]; then # extra-project diff
  cd "$currentdir" || exit
  if [ -d "$1" ] && [ -d "$2" ]; then # compare two directories
@@ -855,8 +890,10 @@ unset reportdir
 trap texit EXIT
 reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
  { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
+dfifo=$reportdir'/FIFO'
+mkfifo "$dfifo"
 
-# compare engine outputs 
+# compare engine outputs
 #reportnew="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
 # { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
 
@@ -874,25 +911,36 @@ export LC_ALL=C
 dopts='-stdU'"$context"
 foldif='sub-folder contents differ'
 if [ "$state" = 'dual' ]; then
- # directly dispatch extra-project 'file' runs
- diffproc
+# directly dispatch extra-project 'file' runs
+ diffproc &
 else
 # single-project, default-project and extra-project 'dir' runs
  # supplemental report for default-project and extra-project 'dir'
  instr "$state" 'default dir' &&
   supreport "$sourcedir" "$targetdir" > "$missfile" &
  # queue files for diff comparison
- dpl=0
+ dpl=1
  zglob "$sourcedir" "$glob" 'mainloop'
 fi
 
-wait # for reporting sub-processes to finish
+# wait for reporting sub-processes to finish
+[ "$mode" = 'test' ] && {
+ echo
+ ps --ppid "$$"
+ jobs -l
+}
+while IFS=$'\n' [ "$(($(
+  ps --ppid "$$" | grep -v 'defunct\|ps\|grep' | wc -l
+ )-2))" -gt 0 ]; do
+ read line < "$dfifo" # or implement signals
+ [ "$mode" = 'test' ] &&
+  printf "completed %s\n" "$line"
+done
 
-# core time test exits here
+# core test exits here
 [ "$mode" = 'test' ] && exit
+rm "$dfifo"
 
-
-###   post-processing
 
 
 finish(){
@@ -906,6 +954,25 @@ finish(){
  done
 }
 
+
+statistics(){
+ final="$1"
+ [ -f "$final" ] && { # skip loop if no reports
+  tfx="$final"'_tfx'
+  [ -n "$layout" ] && mv "$final" "$tfx" && return # pass-through 'mixed'
+  tail -n 4 -- "$final" | {
+   IFS=''; read -r fif; read -r line; read -r swap
+   instr "$foldif" "$fif" || # temp bypass subfolder content reports
+    printf '%s\n%s\n%s\n%s\n' "$bgline" "$swap" "$line" "$bgpoly" > "$tfx"
+  }
+  cat -- "$final" >> "$tfx"
+  [ "$mode" = 'page' ] && finish "$tfx" # fill remaining lines with spaces
+  rcount=$(( rcount + 1 ))
+ }
+}
+
+
+###   post-processing
 
 # prepare brief section labels
 brf="$reportdir"'/_0_brief'
@@ -928,22 +995,6 @@ printf '%s\n' "$bgline" >> "$brf"
 # remove meta files
 [ "$mode" = 'keep' ] ||
  rm -f -- "$reportdir"/_00* "$changefile" "$samefile"
-
-statistics(){
- final="$1"
- [ -f "$final" ] && { # skip loop if no reports
-  tfx="$final"'_tfx'
-  [ -n "$layout" ] && mv "$final" "$tfx" && continue # pass-through 'mixed'
-  tail -n 4 -- "$final" | {
-   IFS=''; read -r fif; read -r line; read -r swap
-   instr "$foldif" "$fif" || # temp bypass subfolder content reports
-    printf '%s\n%s\n%s\n%s\n' "$bgline" "$swap" "$line" "$bgpoly" > "$tfx"
-  }
-  cat -- "$final" >> "$tfx"
-  [ "$mode" = 'page' ] && finish "$tfx" # fill remaining lines with spaces
-  rcount=$(( rcount + 1 ))
- }
-}
 
 # prepend statistics from bottom of each report to top
 rcount=0
