@@ -22,8 +22,9 @@ simply want to check whether your terminal supports 24bit direct-color?
 
 
 - side-by-side human oriented output
+- script includes help, a man page and footnote
 - tested with xterm, lxterminal, rxvt, screen, tmux
-- documentation is built into the script file, including a footnote
+
 
 
 ## getting started
