@@ -229,6 +229,7 @@ nam_clrdcs='darker gray' # 24bit color names are user specified
 # 256color index to X11R4 name is sourced from configuration file
 
 
+
 project(){
  # generate a registration file or show color swatches
  [ "$testdirect" = true ] && colors="$colors"'|dcs'
@@ -367,15 +368,10 @@ $bgline" >> "$espr"
 ' "$dpret" "$result" >> "$unknown"
   ;;
  esac
- # flush fifo, no hang if empty pipe
- dd if="$dfifo" iflag=nonblock of=/dev/null 2&>1 > /dev/null 
- [ "$mode" = 'test' ] && {
-  sleep 1 # comment for speed test
-  echo '
- ping fifo'
- }
+ [ -n "$sequence" ] && sleep "$sequence"
  # notification that diffproc has completed
- echo "$sourcefile" > "$dfifo" # not right after dd line
+ [ "$mode" = 'test' ] && echo $'\n'"ping fifo $sourcefile"
+ echo "$sourcefile" > "$dfifo"
 }
 
 
@@ -434,8 +430,8 @@ newdif(){
 }
 
 nlines(){
-    printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${1:0:$dwidth}"
-    : $((add++))
+ printf '>%s%s\n' "${dplace:${#a}}$((a++))" "${1:0:$dwidth}"
+ : $((add++))
 }
 
 
@@ -518,7 +514,7 @@ padline(){ printf '%s\n' "$1$2${bgpoly:${#2}}$3"; } # pad to width
 
 zglob(){
 # $~var
- if [ -n "$zsh" ]; then
+ if [ -n "$ZSH_VERSION" ]; then
   for c in "$1"$~2; do "$3" "$c"; done
  else
   for c in "$1"$2; do "$3" "$c"; done
@@ -527,7 +523,7 @@ zglob(){
 
 zsplit(){
 # setopt SH_WORD_SPLIT, zsh -y, $=var or use (s) flag instead of IFS
- if [ -n "$zsh" ]; then
+ if [ -n "$ZSH_VERSION" ]; then
   for c in "$=1"; do "$2" "$c" "$3"; done # or ${(s.,.)$1}
  else
   for c in $1; do "$2" "$c" "$3"; done
@@ -621,49 +617,52 @@ $mdiff"
 
 mainloop(){
  sourcefile="$1"
- waitmsg='
-'
+ fdp=''
  # posix glob empty set yields literal match string
  if [ -e "$sourcefile" ]; then # ensure result exists
   # launch up to $dproclimit processes in the background
   waitmsg="dpl $dpl"
-  [ "$((dpl++))" -ge "$dproclimit" ] && { # one at a time
+  [ "$((dpl++))" -gt "$dproclimit" ] && { # one at a time
    # pstree $$ | grep -v '\(grep\|pstree\)'
-   numdiffs="$(ps --ppid "$$" )"
+   # flush fifo, no hang if empty pipe
+   dflush="$(dd if="$dfifo" iflag=nonblock of=/dev/null 2>&1)"
+   [ -n "$sequence" ] && waitmsg="$waitmsg
+dd flush fifo
+$dflush"
+   numdiffs="$(ps --ppid "$$" | grep -v 'defunct\|ps)')"
    waitmsg="$waitmsg
 $numdiffs"
    numdiffs="$(($(echo "$numdiffs" | wc -l)-2))"
    waitmsg="$waitmsg
-numdiff $numdiffs
-"
+numdiff $numdiffs"
    if [ "$numdiffs" -lt "$dproclimit" ]; then
-    dpl="$numdiffs"
-    waitmsg="$waitmsg"' no'
+    dpl="$((numdiffs+2))"
+    waitmsg="$waitmsg
+dpl $((numdiffs+1))"
    else
-    read < "$dfifo" # wait for any diffproc to finish
+    [ "$mode" = 'test' ] && echo $'\n''wait'
+    read fdp < "$dfifo" # wait for any diffproc to finish
+    fdp="fifo $fdp"$'\n'
    fi
-   waitmsg="$waitmsg"' wait'
   }
-  waitmsg="$waitmsg $sourcefile"
  else
   echo 'no source files '"$(pwd)/$sourcefile"
   exit
  fi
+ # process diff results
  fname="${sourcefile##*/}"
  targetfile="$targetdir$fname"
- [ "$mode" = 'test' ] && [ -n "$waitmsg" ] && 
-  printf '\n%s\ndiffproc %s\n' "$waitmsg" "$targetfile"
- diffproc & # process diff results
+ diffproc &
+ dpid="$!"
+ [ "$mode" = 'test' ] &&
+  printf '\n%s\n%sdiffproc %s %s\n' "$waitmsg" "$fdp" "$sourcefile" "$dpid"
 }
 
 
-### main
-
 ##  detect zsh
-zsh=''
-shell="$(cat /proc/$$/cmdline | tr -d '\0')"
-# disable zsh error on glob pattern no match
-instr 'zsh' "$shell" && zsh='true' && setopt +o nomatch
+# disable zsh error on glob match returning empty-set
+# (result is tested in-script)
+[ -n "$ZSH_VERSION" ] && setopt +o nomatch
 
 ##  precursory arguments
 printf '%s' "$reset" # start with 'clean slate'
@@ -776,6 +775,8 @@ while [ $((x--)) -gt 0 ]; do bgpoly="$bgpoly$bgp"; done
 bgpoly="$bgpoly${bgp:0:$columns%50}"
 bgline="$clrbg$bgpoly"
 
+
+
 switch(){
  [ -z "$1" ] && return 1
  case "$1" in
@@ -785,15 +786,20 @@ switch(){
   'term') mode='term' ;;
   'page') mode='page' ;;
   'test') mode='test' ;;
+  'seq') mode='test'; sequence=1 ;;
   'keep') mode='keep'; tmpdir='' ;;
   *) return 1
  esac
  return 0
 }
 
+
+### main
+
 ##  main arguments
 mode='default' # display
 state='default' # semaphore
+sequence='' # extended test mode
 switch "$1" && shift # $1 was a mode argument
 # option bridge
 [ "$1" = '--' ] && shift  # filename can be same as options
@@ -887,7 +893,7 @@ reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
 dfifo=$reportdir'/FIFO'
 mkfifo "$dfifo"
 
-# compare engine outputs 
+# compare engine outputs
 #reportnew="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
 # { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
 
@@ -913,17 +919,20 @@ else
  instr "$state" 'default dir' &&
   supreport "$sourcedir" "$targetdir" > "$missfile" &
  # queue files for diff comparison
- dpl=1; zglob "$sourcedir" "$glob" 'mainloop'
+ dpl=1
+ zglob "$sourcedir" "$glob" 'mainloop'
 fi
 
 # wait for reporting sub-processes to finish
-[ "$mode" = 'test' ] && { echo "
-$(ps --ppid "$$")"; jobs -lr; }
-# figure out how many diffprocs to wait for
+[ "$mode" = 'test' ] && {
+ echo
+ ps --ppid "$$"
+ jobs -l
+}
 while IFS=$'\n' [ "$(($(
-  ps --ppid "$$" | grep -v 'defunct' | wc -l
- )-2))" -gt 0 ]; do # or implement signals
- read line < "$dfifo"
+  ps --ppid "$$" | grep -v 'defunct\|ps\|grep' | wc -l
+ )-2))" -gt 0 ]; do
+ read line < "$dfifo" # or implement signals
  [ "$mode" = 'test' ] &&
   printf "completed %s\n" "$line"
 done
@@ -932,7 +941,7 @@ done
 [ "$mode" = 'test' ] && exit
 rm "$dfifo"
 
-###   post-processing
+
 
 finish(){
  # fill bottom of file given with lines of spaces, minus offset argument
@@ -945,6 +954,25 @@ finish(){
  done
 }
 
+
+statistics(){
+ final="$1"
+ [ -f "$final" ] && { # skip loop if no reports
+  tfx="$final"'_tfx'
+  [ -n "$layout" ] && mv "$final" "$tfx" && return # pass-through 'mixed'
+  tail -n 4 -- "$final" | {
+   IFS=''; read -r fif; read -r line; read -r swap
+   instr "$foldif" "$fif" || # temp bypass subfolder content reports
+    printf '%s\n%s\n%s\n%s\n' "$bgline" "$swap" "$line" "$bgpoly" > "$tfx"
+  }
+  cat -- "$final" >> "$tfx"
+  [ "$mode" = 'page' ] && finish "$tfx" # fill remaining lines with spaces
+  rcount=$(( rcount + 1 ))
+ }
+}
+
+
+###   post-processing
 
 # prepare brief section labels
 brf="$reportdir"'/_0_brief'
@@ -967,22 +995,6 @@ printf '%s\n' "$bgline" >> "$brf"
 # remove meta files
 [ "$mode" = 'keep' ] ||
  rm -f -- "$reportdir"/_00* "$changefile" "$samefile"
-
-statistics(){
- final="$1"
- [ -f "$final" ] && { # skip loop if no reports
-  tfx="$final"'_tfx'
-  [ -n "$layout" ] && mv "$final" "$tfx" && return # pass-through 'mixed'
-  tail -n 4 -- "$final" | {
-   IFS=''; read -r fif; read -r line; read -r swap
-   instr "$foldif" "$fif" || # temp bypass subfolder content reports
-    printf '%s\n%s\n%s\n%s\n' "$bgline" "$swap" "$line" "$bgpoly" > "$tfx"
-  }
-  cat -- "$final" >> "$tfx"
-  [ "$mode" = 'page' ] && finish "$tfx" # fill remaining lines with spaces
-  rcount=$(( rcount + 1 ))
- }
-}
 
 # prepend statistics from bottom of each report to top
 rcount=0
