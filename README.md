@@ -10,14 +10,17 @@ something amiss? quickly see which file contains spurious punctuation
 
 simply want to check whether your terminal supports 24bit direct-color?
 
+
 - project-based and standalone modality
 - visually assess progress on small projects or changes in files and directories
 - persistently remembers the most recent project registration
 - each project register may specify a custom palette
+
+
 - 256color and 24bit direct-color support
-  
-  
 - ECMA-48 conformance
+
+
 - side-by-side human oriented output
 - tested with xterm, lxterminal, rxvt, screen, tmux
 - documentation is built into the script file, including a footnote
