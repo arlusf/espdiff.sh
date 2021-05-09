@@ -14,7 +14,6 @@ simply want to check whether your terminal supports 24bit direct-color?
 - visually assess progress on small projects or changes in files and directories
 - persistently remembers the most recent project registration
 - each project register may specify a custom palette
-
 - 256color and 24bit direct-color support
 - ECMA-48 conformance
 - side-by-side human oriented output
@@ -129,11 +128,6 @@ simply want to check whether your terminal supports 24bit direct-color?
     ${ substring expansion variable : offset parameter : -length is negative }
       in Bash since 4.2-alpha, busybox?
 
-  troubleshooting & theory of operation
-   determine exact offset to the middle column in side-by-side diff output
-   this is expected to be standard for any implemented diff
-   using offset, grep provides line numbers, discarding unselected context
-   line is then split in half, colorized and reassembled
 ```
 
 
