@@ -115,16 +115,12 @@ simply want to check whether your terminal supports 24bit direct-color?
     if busybox is the default system shell:
      change shebang to !/bin/sh
      install full version of diff, builtin does not have '-y' option
-    distribution binary does not pass unit tests A or B:
+    distribution binary does not pass unit test B:
      compile busybox-1.32.1 (latest stable)
       make defconfig
       make
 
-  unit tests - first line describes correct result
-
-    A) displays 'one' after 1 second duration
-    sleep 3 && echo three & sleep 1 & wait -n; echo one
-      wrong: displays 'one' immediately
+  unit test - first line describes correct result
 
     B) displays 'qwe'
     a='asdfqwerty'; echo ${a:4:-3}
