@@ -15,7 +15,8 @@ simply want to check whether your terminal supports 24bit direct-color?
 - persistently remembers the most recent project registration
 - each project register may specify a custom palette
 - 256color and 24bit direct-color support
-
+  
+  
 - ECMA-48 conformance
 - side-by-side human oriented output
 - tested with xterm, lxterminal, rxvt, screen, tmux
