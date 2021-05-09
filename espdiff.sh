@@ -436,6 +436,10 @@ nlines(){
 
 
 tfixdif(){
+#   $dpos is exact offset to the middle column in side-by-side diff output
+#   $gfmt position is expected to be consistent for any implemented diff
+#   using $dpos, grep provides line numbers, discarding unselected context
+#   the line is then split in half, colorized and reassembled
  cmpoff=''
  srcoff=''
  modline=''
@@ -1092,17 +1096,13 @@ exit
 #    if busybox is the default system shell:
 #     change shebang to #!/bin/sh
 #     install full version of diff - builtin does not have -y option
-#    distribution binary does not pass unit tests A or B:
+#    distribution binary does not pass unit test B:
 #     compile busybox-1.32.1 (latest stable release)
 #      make defconfig
 #      or make menuconfig - add and remove functionality/builtins*
 #      make
 
-##  unit tests - first line describes correct result
-#
-#    A) displays 'one' after 1 second duration
-#    sleep 3 && echo three & sleep 1 & wait -n; echo one
-#      fail: displays 'one' immediately
+##  unit test - first line describes correct result
 #
 #    B) displays 'qwe'
 #    a='asdfqwerty'; echo ${a:4:-3}
@@ -1110,13 +1110,6 @@ exit
 #      sh: Illegal number: -3
 #    ${ substring expansion parameter : offset : -length is negative }
 #      in Bash since 4.2-alpha, busybox?
-
-##  troubleshooting & theory of operation
-#
-#   $dpos is exact offset to the middle column in side-by-side diff output
-#   $gfmt position is expected to be consistent for any implemented diff
-#   using $dpos, grep provides line numbers, discarding unselected context
-#   the line is then split in half, colorized and reassembled
 
 # 'clairvoyance 6' and 'incursive engine' are trademarks of espdiff.sh
 
