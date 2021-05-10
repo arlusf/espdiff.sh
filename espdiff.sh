@@ -535,18 +535,6 @@ zsplit(){
 }
 
 
-reduce(){
-  one="${abs%%/..*}"
-  while [ ${#one} -ne ${#abs} ]
-  do
-    two="${abs:${#one}+3}"
-    one="${one%/*}"
-    abs="$one$two"
-    one="${abs%%/..*}"
-  done
-  : "${abs:=/}"
-}
-
 sanitize(){
   esprjtmp="$esprj"'tmp'
   if [ "$1" ]; then
@@ -555,40 +543,38 @@ sanitize(){
       abs="${1%/*}"
     else
       abs="$currentdir/${1%/*}"
-      reduce #'/dir/..' sequences recursively
     fi
   else
     regfile='.esprj'
     abs="$currentdir"
     [ "$prloc" = 'parent' ] && abs="${abs%/*}"
   fi
+  # escape forward slashes in path
+  abs="${abs//\//\\/}"'\/'
+  # (not restricting use of any filename chars to delimit sed)
+  fixrel="s/(projectdir=')([^/][^']*')/\1"
   # permit direct-color sample in project registration
   scolor="$colors"'|dcs'
   # pass correctly formatted keywords, allowed chars and numeric ranges
   regx="((context='[1-9]')"
   regx="$regx|(testdirect='(true|false)')"
   regx="$regx|((columns|lines)='[0-9]{1,4}')"
-  regx="$regx|((targetdir|sourcedir|projectdir)='[$allowchars]{3,80}')"
+  regx="$regx|((targetdir|sourcedir|projectdir)='[$allowchars]{2,80}')"
   regx="$regx|((titletxt|nam_clr($scolor))='[$allowchars]{3,25}')"
-  num='(25[0-5]|(([0-1])?[0-9]|2[0-4])?[0-9])' # 0-255
+  num='(25[0-5]|(([0-1])?[0-9]|2[0-4])?[0-9])' # 0-255 n, nn, nnn, 0n & 00n
   cdirect="$num"'[;:]'"$num"'[;:]'
   regx="$regx|(clr($scolor)=[$](fgc'|bgc'|([fb]dc)'$cdirect)${num}m'))" # m
-  # strip blank and comment lines along with any preceeding whitespace
+  # strip blank and comment lines along with any preceding whitespace
   seqrx="$csi"'[^m]*m' # m is CSI final char
   sed -r -- 's/'"$seqrx"'//g;/^\s*(#.*)?$/d' "$regfile" |
     tr -cd '\12\15\40-\176' | # filter - pass lf, cr, printable
       tee -- "$esprjtmp" |
         # filter sequences with correct option=value, once per line
         # insert blank line if $regx does not match
-        sed -rn -- 's/.*'"$regx"'.*/\1/p;te;i
-:e' | {
-          # escape forward slashes in path
-          # (not restricting use of any filename chars to delimit sed)
-          abs="${abs//\//\\/}"'\/'
-          # fix relative projectdir in session registration file
-          fixrel="s/(projectdir=')([^/][^']*')/\1"
-          sed -r -- "$fixrel$abs"'\2/;Te;i# fixed relative projectdir
-:e'; } > "$esprj"
+        sed -rn -- 's/.*'"$regx"'.*/\1/p;tz;i
+:z' | # fix relative projectdir in session registration file
+          sed -r -- "$fixrel$abs"'\2/;Tz;i# fixed relative projectdir
+:z s /[^/]*/\.\.  ;tz' > "$esprj" # collapse /dir/.. parent indirection
   # send rejected lines to stderr
   grep -v '^#' "$esprj" | # ignore '# fixed relative...' line
     paste -d '\n' -- - "$esprjtmp" | # interleave
@@ -631,7 +617,7 @@ mainloop(){
       # flush fifo, no hang if empty pipe
       dflush="$(dd if="$dfifo" iflag=nonblock of=/dev/null 2>&1)"
       [ -n "$sequence" ] && waitmsg="$waitmsg
-dd flush fifo
+flush fifo
 $dflush"
       numdiffs="$(ps --ppid "$$" | grep -v 'defunct\|ps)')"
       waitmsg="$waitmsg
@@ -663,7 +649,7 @@ dpl $((numdiffs+1))"
 }
 
 
-##  detect zsh
+## zsh nomatch
 # disable zsh error on glob match returning empty-set
 # (result is tested in-script)
 [ -n "$ZSH_VERSION" ] && setopt +o nomatch
@@ -703,7 +689,6 @@ colors='bg|brf|msf|tgt|src|smd|txt|ttl|new|tmd|rmv|err'
 tmpdir="$( fixup "$tmpdir" )"
 sessiondir="$( fixup "$sessiondir" )"
 esprj="$sessiondir"'.esprj' # session project file
-
 [ -d "$sessiondir" ] ||
   { printf 'no sessiondir %s\n' "$clrerr$sessiondir$reset" >&2; exit; }
 
@@ -894,6 +879,8 @@ unset reportdir
 trap texit EXIT
 reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
   { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
+
+##  fifo heartbeat
 dfifo=$reportdir'/FIFO'
 mkfifo "$dfifo"
 
@@ -933,13 +920,13 @@ fi
   ps --ppid "$$"
   jobs -l
 }
-while IFS=$'\n' [ "$(($(
-    ps --ppid "$$" | grep -v 'defunct\|ps\|grep' | wc -l
-  )-2))" -gt 0 ]; do
-  read line < "$dfifo" # or implement signals
-  [ "$mode" = 'test' ] &&
-    printf "completed %s\n" "$line"
-done
+while IFS=$'\n'
+  [ "$(($(ps --ppid "$$" | grep -v 'defunct\|ps\|grep' | wc -l)-2))" -gt 0 ]
+    do
+      read line < "$dfifo" # or implement signals
+      [ "$mode" = 'test' ] &&
+        printf "completed %s\n" "$line"
+    done
 
 # core test exits here
 [ "$mode" = 'test' ] && exit
