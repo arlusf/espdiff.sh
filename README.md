@@ -31,7 +31,7 @@ simply want to check whether your terminal supports 24bit direct-color?
 
 **extract example tarball:**
 
-`tar -xf example.tar`
+`tar -xf sample.tar`
 
 **test basic function:**
 
