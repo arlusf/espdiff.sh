@@ -35,7 +35,7 @@ name='  espdiff.sh  version 5.0'
 ##  configfile location and md5sum
 readonly configfile="$HOME"'/.espdiffrc'
   # readonly configfile='/root/.espdiffrc' # embedded devices
-readonly mdsum='12f747c66f2602751b7961e4c62eb616'
+readonly mdsum='225755966757f794e55b00aae8e82d02'
   # readonly mdsum='unlocked' # disable configfile verification
 
 ##  session location for project registration
@@ -260,9 +260,8 @@ $reverse$bgpoly
 $bgpoly$reset
 $bgline"
   fi
-  if [ -n "$xnam" ]; then
-    # 256color names from configuration file
-    xpush # implement array, no eval
+  if [ -n "$xnam" ]; then # 256color names from configuration file
+    xpush # implement array index, no eval
   fi
   IFS=\|
   zsplit "$colors" 'pcolor' "$1"
@@ -296,48 +295,49 @@ xpush(){ # populate array index to $xnam (csv)
 xnames(){
   [ -z "$xindex" ] && cname='unnamed' && return
   local c=$(($1*$depth))
-  local d=$((($1+1)*$depth))
+  local b=$((($1+1)*$depth))
   local cc="${xindex:$c:4}"
-  local dd="${xindex:$d:4}"
-  cname="${xnam:$cc:$(($dd-$cc-1))}"
-  xstruct="$c  $d  $dd-$cc"
+  local bb="${xindex:$b:4}"
+  cname="${xnam:$cc:$(($bb-$cc-1))}"
+  xstruct="$c  $b  $bb-$cc"
 }
 
 pcolor(){
-    color='clr'"$1"
-    typ='typ_'"$color"
-    nam='nam_'"$color"
-    eval "colr=\$$color"
-    cidx="${colr:7:-1}"
-    cidx="${cidx#"${cidx%%[!0]*}"}" # strip leading zeros
-    : "${cidx:=0}" # do not leave $cidx empty
-    if [ "${colr:0:${#fgc}}" = "$fgc" ]; then # $colr begins with '$fgc'
-      key='$fgc'
-      xnames "$cidx" # $cname
-    # $fgc and $bgc sequences use configured names
-    elif [ "${colr:0:${#bgc}}" = "$bgc" ]; then
-      key='$bgc'
-      xnames "$cidx" # $cname
+  color='clr'"$1"
+  typ='typ_'"$color"
+  nam='nam_'"$color"
+  eval "colr=\$$color"
+  cidx="${colr:7:-1}"
+  cidx="${cidx#"${cidx%%[!0]*}"}" # strip leading zeros
+  : "${cidx:=0}" # do not leave $cidx empty
+  if [ "${colr:0:${#fgc}}" = "$fgc" ]; then # $colr begins with '$fgc'
+    key='$fgc'
+    xnames "$cidx" # $cname
+  # $fgc and $bgc sequences use configured names
+  elif [ "${colr:0:${#bgc}}" = "$bgc" ]; then
+    key='$bgc'
+    xnames "$cidx" # $cname
+  else
+    eval "nam=\"\$$nam\"" # user dc name
+    cname="$nam" # for 'show'
+    [ "${colr:0:${#fdc}}" = "$fdc" ] && key='$fdc' || key='$bdc'
+  fi
+  eval "typ=\$$typ"
+  if [ "$2" = 'gen' ]; then
+    [ "$color" = 'clrbg' ] && fcol='' || fcol=$colr
+    if instr "$key" '$fdc $bdc'; then
+      printf '%snam_%s\n' "$fcol" "$color='$nam'"
+      cname="user custom"
+      color="$color=$key'${colr#*[25];}'"
     else
-      eval "nam=\"\$$nam\"" # user dc name
-      cname="'$nam'" # for 'show'
-      [ "${colr:0:${#fdc}}" = "$fdc" ] && key='$fdc' || key='$bdc'
+      color="$color=$key'${cidx}m'"
     fi
-    eval "typ=\$$typ"
-    if [ "$2" = 'gen' ]; then
-      [ "$color" = 'clrbg' ] && fcol='' || fcol=$colr
-      if instr "$key" '$fdc $bdc'; then
-        printf '%snam_%s\n' "$fcol" "$color='$nam'"
-        cname="user custom"
-        color="$color=$key'${colr#*[25];}'"
-        color="$color=$key'${cidx}m'"
-      fi
-      printf '%s%-27s# %-24s%s\n' "$fcol" "$color" "$cname" "$typ$clrbg"
-    else # 'show'
-      [ "$color" = 'clrbg' ] && return
-      [ "$color" = 'clrttl' ] && tsamp="$bold" || tsamp=''
-      padline "$clrbg$colr" "$cname   $typ" "$tsamp$sample"
-    fi
+    printf '%s%-27s# %-24s%s\n' "$fcol" "$color" "$cname" "$typ$clrbg"
+  else # 'show'
+    [ "$color" = 'clrbg' ] && return
+    [ "$color" = 'clrttl' ] && tsamp="$bold" || tsamp=''
+    padline "$clrbg$colr" "'$cname'   $typ" "$tsamp$sample"
+  fi
 }
 
 ramps(){
@@ -354,7 +354,7 @@ ramps(){
 
 
 diffproc(){
-  if [ -n "$layout" ]; then
+  if [ -n "$layout" ]; then # dual engines for now
     result="$(
       # -stdU   report-identical-files   expand-tabs   minimal   unified-context
       diff "$dopts" -F "$dfunc" -- "$sourcefile" "$targetfile" 2>&1 )"
@@ -928,7 +928,6 @@ export LC_ALL=C
 ##  process diff reports
 dopts='-stdU'"$context"
 foldif='sub-folder contents differ'
-[ "$mode" = 'time' ] && readonly tite='time'
 if [ "$state" = 'dual' ]; then
 # directly dispatch extra-project 'file' runs
   diffproc &
