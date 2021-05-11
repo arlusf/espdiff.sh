@@ -151,12 +151,17 @@ exit
 #    experimental feature, show containing function/section
 #    remove dependency on external diff for busybox
 
-##  core performance test
-#    project reports are parsed but not displayed
-#    shows concurrent process limiting
-#    no post-processing
+##  core tests
+#    project reports are parsed but not displayed, no post-processing
 #
-#      >$  time ./espdiff.sh test
+#    show concurrent process limiting
+#      >$  espdiff.sh test
+#
+#    wait delay sequence
+#      >$  espdiff.sh seq
+#
+#    performance test
+#      >$  espdiff.sh time
 
 ###   system options
 umask 066 # user only permissions for new files
@@ -370,7 +375,7 @@ $bgline" >> "$espr"
   esac
   [ -n "$sequence" ] && sleep "$sequence"
   # notification that diffproc has completed
-  [ "$mode" = 'test' ] && echo $'\n'"ping fifo $sourcefile"
+  [ "$mode" = 'test' ] && printf '\n\nping fifo %s' "$sourcefile"
   echo "$sourcefile" > "$dfifo"
 }
 
@@ -536,26 +541,21 @@ zsplit(){
 
 
 sanitize(){
-  esprjtmp="$esprj"'tmp'
   if [ "$1" ]; then
     regfile="$1"
-    if [ ${1:0:1} = '/' ]; then
-      abs="${1%/*}"
-    else
-      abs="$currentdir/${1%/*}"
-    fi
+    [ ${1:0:1} = '/' ] && abs="${1%/*}" || abs="$currentdir/${1%/*}"
   else
     regfile='.esprj'
-    abs="$currentdir"
-    [ "$prloc" = 'parent' ] && abs="${abs%/*}"
+    [ "$prloc" = 'parent' ] && abs="${currentdir%/*}" || abs="$currentdir"
   fi
+  esprjtmp="$esprj"'tmp'
   # escape forward slashes in path
   abs="${abs//\//\\/}"'\/'
   # (not restricting use of any filename chars to delimit sed)
   fixrel="s/(projectdir=')([^/][^']*')/\1"
   # permit direct-color sample in project registration
   scolor="$colors"'|dcs'
-  # pass correctly formatted keywords, allowed chars and numeric ranges
+  # pass correctly formatted keywords, allowed characters and numeric ranges
   regx="((context='[1-9]')"
   regx="$regx|(testdirect='(true|false)')"
   regx="$regx|((columns|lines)='[0-9]{1,4}')"
@@ -568,6 +568,7 @@ sanitize(){
   seqrx="$csi"'[^m]*m' # m is CSI final char
   sed -r -- 's/'"$seqrx"'//g;/^\s*(#.*)?$/d' "$regfile" |
     tr -cd '\12\15\40-\176' | # filter - pass lf, cr, printable
+    # or '[:print:]' (POSIX character class)
       tee -- "$esprjtmp" |
         # filter sequences with correct option=value, once per line
         # insert blank line if $regx does not match
@@ -611,7 +612,7 @@ mainloop(){
   # posix glob empty set yields literal match string
   if [ -e "$sourcefile" ]; then # ensure result exists
     # launch up to $dproclimit processes in the background
-    waitmsg="dpl $dpl"
+    waitmsg=$'\n'"dpl $dpl"
     [ "$((dpl++))" -gt "$dproclimit" ] && { # one at a time
       # pstree $$ | grep -v '\(grep\|pstree\)'
       # flush fifo, no hang if empty pipe
@@ -628,11 +629,13 @@ numdiff $numdiffs"
       if [ "$numdiffs" -lt "$dproclimit" ]; then
         dpl="$((numdiffs+2))"
         waitmsg="$waitmsg
+
 dpl $((numdiffs+1))"
       else
-        [ "$mode" = 'test' ] && echo $'\n''wait'
+        [ "$mode" = 'test' ] && printf '\n%s\n\nwait' "$waitmsg"
+        waitmsg=''
         read fdp < "$dfifo" # wait for any diffproc to finish
-        fdp="fifo $fdp"$'\n'
+        fdp="fifo $fdp"
       fi
     }
   else
@@ -645,7 +648,7 @@ dpl $((numdiffs+1))"
   diffproc &
   dpid="$!"
   [ "$mode" = 'test' ] &&
-    printf '\n%s\n%sdiffproc %s %s\n' "$waitmsg" "$fdp" "$sourcefile" "$dpid"
+    printf '\n%s\ndiffproc %s %s' "$waitmsg$fdp" "$sourcefile" "$dpid"
 }
 
 
@@ -775,6 +778,7 @@ switch(){
     'term') mode='term' ;;
     'page') mode='page' ;;
     'test') mode='test' ;;
+    'time') tite="$(date +%s%N)" ;;
     'seq') mode='test'; sequence=1 ;;
     'keep') mode='keep'; tmpdir='' ;;
     *) return 1
@@ -901,6 +905,7 @@ export LC_ALL=C
 ##  process diff reports
 dopts='-stdU'"$context"
 foldif='sub-folder contents differ'
+[ "$mode" = 'time' ] && readonly tite='time'
 if [ "$state" = 'dual' ]; then
 # directly dispatch extra-project 'file' runs
   diffproc &
@@ -915,21 +920,18 @@ else
 fi
 
 # wait for reporting sub-processes to finish
-[ "$mode" = 'test' ] && {
-  echo
-  ps --ppid "$$"
-  jobs -l
-}
+[ "$mode" = 'test' ] && finis=$'\n'"$(ps --ppid "$$"; jobs -l)" || finis=''
 while IFS=$'\n'
   [ "$(($(ps --ppid "$$" | grep -v 'defunct\|ps\|grep' | wc -l)-2))" -gt 0 ]
     do
       read line < "$dfifo" # or implement signals
-      [ "$mode" = 'test' ] &&
-        printf "completed %s\n" "$line"
+      [ "$mode" = 'test' ] && finis="$finis
+completed $line"
     done
 
-# core test exits here
-[ "$mode" = 'test' ] && exit
+# tests exit here
+[ -n "$tite" ] && echo "elapsed core time: $(($(date +%s%N)-tite))ns" && exit
+[ "$mode" = 'test' ] && echo "$finis"$'\n' && exit
 rm "$dfifo"
 
 
