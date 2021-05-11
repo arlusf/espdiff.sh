@@ -261,10 +261,8 @@ $bgpoly$reset
 $bgline"
   fi
   if [ -n "$xnam" ]; then
-  # 256color names from configuration file
-    x=0
-    IFS=,
-    zsplit "$xnam" 'xname'
+    # 256color names from configuration file
+    xpush # implement array, no eval
   fi
   IFS=\|
   zsplit "$colors" 'pcolor' "$1"
@@ -276,7 +274,34 @@ $bgline"
   exit
 }
 
-xname(){ eval "xnam$((x++))=$1"; } #! eval and ${!var} can be dangerous!
+xpush(){ # populate array index to $xnam (csv)
+  local items=255
+  local span='    '
+  depth=${#span} # digits required to hold maximum index value
+  local a="$xnam"',' # requires trailing delimiter to exit while loop
+  local x=${#a}; xindex=${span:1}'0' # digits are one char wide
+  while [ ${#a} -gt 0 ]; do
+   a=${a#*,}; y=$((x-${#a}))
+   xindex="$xindex${span:${#y}}$y"
+  done
+  return # comment to display array structure components
+  local array='256color name index'
+  z=-1; while [ $((z++)) -lt "$items" ]; do # 0-255
+    xnames "$z"
+    array="$array"$'\n'"$z  $cname  $xstruct"
+  done
+  echo "$array"
+}
+
+xnames(){
+  [ -z "$xindex" ] && cname='unnamed' && return
+  local c=$(($1*$depth))
+  local d=$((($1+1)*$depth))
+  local cc="${xindex:$c:4}"
+  local dd="${xindex:$d:4}"
+  cname="${xnam:$cc:$(($dd-$cc-1))}"
+  xstruct="$c  $d  $dd-$cc"
+}
 
 pcolor(){
     color='clr'"$1"
@@ -286,34 +311,32 @@ pcolor(){
     cidx="${colr:7:-1}"
     cidx="${cidx#"${cidx%%[!0]*}"}" # strip leading zeros
     : "${cidx:=0}" # do not leave $cidx empty
-    if [ "${colr:0:${#fgc}}" = "$fgc" ]; then
-      # $colr begins with '$fgc'
+    if [ "${colr:0:${#fgc}}" = "$fgc" ]; then # $colr begins with '$fgc'
       key='$fgc'
-      eval "nam=\"\$xnam$cidx\""
-      # $fgc and $bgc sequences use configured names
+      xnames "$cidx" # $cname
+    # $fgc and $bgc sequences use configured names
     elif [ "${colr:0:${#bgc}}" = "$bgc" ]; then
       key='$bgc'
-      eval "nam=\"\$xnam$cidx\""
+      xnames "$cidx" # $cname
     else
-      eval "nam=\"\$$nam\""
+      eval "nam=\"\$$nam\"" # user dc name
+      cname="'$nam'" # for 'show'
       [ "${colr:0:${#fdc}}" = "$fdc" ] && key='$fdc' || key='$bdc'
     fi
-    : "${nam:='unnamed'}"
     eval "typ=\$$typ"
     if [ "$2" = 'gen' ]; then
       [ "$color" = 'clrbg' ] && fcol='' || fcol=$colr
       if instr "$key" '$fdc $bdc'; then
         printf '%snam_%s\n' "$fcol" "$color='$nam'"
-        nam="user custom"
+        cname="user custom"
         color="$color=$key'${colr#*[25];}'"
-      else
         color="$color=$key'${cidx}m'"
       fi
-      printf '%s%-27s# %-24s%s\n' "$fcol" "$color" "$nam" "$typ$clrbg"
+      printf '%s%-27s# %-24s%s\n' "$fcol" "$color" "$cname" "$typ$clrbg"
     else # 'show'
-      [ "$color" = 'clrbg' ] && continue
+      [ "$color" = 'clrbg' ] && return
       [ "$color" = 'clrttl' ] && tsamp="$bold" || tsamp=''
-      padline "$clrbg$colr" "'$nam'   $typ" "$tsamp$sample"
+      padline "$clrbg$colr" "$cname   $typ" "$tsamp$sample"
     fi
 }
 
