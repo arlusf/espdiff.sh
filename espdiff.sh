@@ -151,12 +151,17 @@ exit
 #    experimental feature, show containing function/section
 #    remove dependency on external diff for busybox
 
-##  core performance test
-#    project reports are parsed but not displayed
-#    shows concurrent process limiting
-#    no post-processing
+##  core tests
+#    project reports are parsed but not displayed, no post-processing
 #
-#      >$  time ./espdiff.sh test
+#    show concurrent process limiting
+#      >$  espdiff.sh test
+#
+#    wait delay sequence
+#      >$  espdiff.sh seq
+#
+#    performance test
+#      >$  espdiff.sh time
 
 ###   system options
 umask 066 # user only permissions for new files
@@ -370,7 +375,7 @@ $bgline" >> "$espr"
   esac
   [ -n "$sequence" ] && sleep "$sequence"
   # notification that diffproc has completed
-  [ "$mode" = 'test' ] && echo $'\n'"ping fifo $sourcefile"
+  [ "$mode" = 'test' ] && printf '\n\nping fifo %s' "$sourcefile"
   echo "$sourcefile" > "$dfifo"
 }
 
@@ -535,60 +540,42 @@ zsplit(){
 }
 
 
-reduce(){
-  one="${abs%%/..*}"
-  while [ ${#one} -ne ${#abs} ]
-  do
-    two="${abs:${#one}+3}"
-    one="${one%/*}"
-    abs="$one$two"
-    one="${abs%%/..*}"
-  done
-  : "${abs:=/}"
-}
-
 sanitize(){
-  esprjtmp="$esprj"'tmp'
   if [ "$1" ]; then
     regfile="$1"
-    if [ ${1:0:1} = '/' ]; then
-      abs="${1%/*}"
-    else
-      abs="$currentdir/${1%/*}"
-      reduce #'/dir/..' sequences recursively
-    fi
+    [ ${1:0:1} = '/' ] && abs="${1%/*}" || abs="$currentdir/${1%/*}"
   else
     regfile='.esprj'
-    abs="$currentdir"
-    [ "$prloc" = 'parent' ] && abs="${abs%/*}"
+    [ "$prloc" = 'parent' ] && abs="${currentdir%/*}" || abs="$currentdir"
   fi
+  esprjtmp="$esprj"'tmp'
+  # escape forward slashes in path
+  abs="${abs//\//\\/}"'\/'
+  # (not restricting use of any filename chars to delimit sed)
+  fixrel="s/(projectdir=')([^/][^']*')/\1"
   # permit direct-color sample in project registration
   scolor="$colors"'|dcs'
-  # pass correctly formatted keywords, allowed chars and numeric ranges
+  # pass correctly formatted keywords, allowed characters and numeric ranges
   regx="((context='[1-9]')"
   regx="$regx|(testdirect='(true|false)')"
   regx="$regx|((columns|lines)='[0-9]{1,4}')"
-  regx="$regx|((targetdir|sourcedir|projectdir)='[$allowchars]{3,80}')"
+  regx="$regx|((targetdir|sourcedir|projectdir)='[$allowchars]{2,80}')"
   regx="$regx|((titletxt|nam_clr($scolor))='[$allowchars]{3,25}')"
-  num='(25[0-5]|(([0-1])?[0-9]|2[0-4])?[0-9])' # 0-255
+  num='(25[0-5]|(([0-1])?[0-9]|2[0-4])?[0-9])' # 0-255 n, nn, nnn, 0n & 00n
   cdirect="$num"'[;:]'"$num"'[;:]'
   regx="$regx|(clr($scolor)=[$](fgc'|bgc'|([fb]dc)'$cdirect)${num}m'))" # m
-  # strip blank and comment lines along with any preceeding whitespace
+  # strip blank and comment lines along with any preceding whitespace
   seqrx="$csi"'[^m]*m' # m is CSI final char
   sed -r -- 's/'"$seqrx"'//g;/^\s*(#.*)?$/d' "$regfile" |
     tr -cd '\12\15\40-\176' | # filter - pass lf, cr, printable
+    # or '[:print:]' (POSIX character class)
       tee -- "$esprjtmp" |
         # filter sequences with correct option=value, once per line
         # insert blank line if $regx does not match
-        sed -rn -- 's/.*'"$regx"'.*/\1/p;te;i
-:e' | {
-          # escape forward slashes in path
-          # (not restricting use of any filename chars to delimit sed)
-          abs="${abs//\//\\/}"'\/'
-          # fix relative projectdir in session registration file
-          fixrel="s/(projectdir=')([^/][^']*')/\1"
-          sed -r -- "$fixrel$abs"'\2/;Te;i# fixed relative projectdir
-:e'; } > "$esprj"
+        sed -rn -- 's/.*'"$regx"'.*/\1/p;tz;i
+:z' | # fix relative projectdir in session registration file
+          sed -r -- "$fixrel$abs"'\2/;Tz;i# fixed relative projectdir
+:z s /[^/]*/\.\.  ;tz' > "$esprj" # collapse /dir/.. parent indirection
   # send rejected lines to stderr
   grep -v '^#' "$esprj" | # ignore '# fixed relative...' line
     paste -d '\n' -- - "$esprjtmp" | # interleave
@@ -625,13 +612,13 @@ mainloop(){
   # posix glob empty set yields literal match string
   if [ -e "$sourcefile" ]; then # ensure result exists
     # launch up to $dproclimit processes in the background
-    waitmsg="dpl $dpl"
+    waitmsg=$'\n'"dpl $dpl"
     [ "$((dpl++))" -gt "$dproclimit" ] && { # one at a time
       # pstree $$ | grep -v '\(grep\|pstree\)'
       # flush fifo, no hang if empty pipe
       dflush="$(dd if="$dfifo" iflag=nonblock of=/dev/null 2>&1)"
       [ -n "$sequence" ] && waitmsg="$waitmsg
-dd flush fifo
+flush fifo
 $dflush"
       numdiffs="$(ps --ppid "$$" | grep -v 'defunct\|ps)')"
       waitmsg="$waitmsg
@@ -642,11 +629,13 @@ numdiff $numdiffs"
       if [ "$numdiffs" -lt "$dproclimit" ]; then
         dpl="$((numdiffs+2))"
         waitmsg="$waitmsg
+
 dpl $((numdiffs+1))"
       else
-        [ "$mode" = 'test' ] && echo $'\n''wait'
+        [ "$mode" = 'test' ] && printf '\n%s\n\nwait' "$waitmsg"
+        waitmsg=''
         read fdp < "$dfifo" # wait for any diffproc to finish
-        fdp="fifo $fdp"$'\n'
+        fdp="fifo $fdp"
       fi
     }
   else
@@ -659,11 +648,11 @@ dpl $((numdiffs+1))"
   diffproc &
   dpid="$!"
   [ "$mode" = 'test' ] &&
-    printf '\n%s\n%sdiffproc %s %s\n' "$waitmsg" "$fdp" "$sourcefile" "$dpid"
+    printf '\n%s\ndiffproc %s %s' "$waitmsg$fdp" "$sourcefile" "$dpid"
 }
 
 
-##  detect zsh
+## zsh nomatch
 # disable zsh error on glob match returning empty-set
 # (result is tested in-script)
 [ -n "$ZSH_VERSION" ] && setopt +o nomatch
@@ -703,7 +692,6 @@ colors='bg|brf|msf|tgt|src|smd|txt|ttl|new|tmd|rmv|err'
 tmpdir="$( fixup "$tmpdir" )"
 sessiondir="$( fixup "$sessiondir" )"
 esprj="$sessiondir"'.esprj' # session project file
-
 [ -d "$sessiondir" ] ||
   { printf 'no sessiondir %s\n' "$clrerr$sessiondir$reset" >&2; exit; }
 
@@ -790,6 +778,7 @@ switch(){
     'term') mode='term' ;;
     'page') mode='page' ;;
     'test') mode='test' ;;
+    'time') tite="$(date +%s%N)" ;;
     'seq') mode='test'; sequence=1 ;;
     'keep') mode='keep'; tmpdir='' ;;
     *) return 1
@@ -894,6 +883,8 @@ unset reportdir
 trap texit EXIT
 reportdir="$( mktemp -d "$tmpdir"'_espdiffXXXXXX' )" ||
   { printf '%serror creating temp file\n' "$clrerr" >&2; exit 1; }
+
+##  fifo heartbeat
 dfifo=$reportdir'/FIFO'
 mkfifo "$dfifo"
 
@@ -914,6 +905,7 @@ export LC_ALL=C
 ##  process diff reports
 dopts='-stdU'"$context"
 foldif='sub-folder contents differ'
+[ "$mode" = 'time' ] && readonly tite='time'
 if [ "$state" = 'dual' ]; then
 # directly dispatch extra-project 'file' runs
   diffproc &
@@ -928,21 +920,18 @@ else
 fi
 
 # wait for reporting sub-processes to finish
-[ "$mode" = 'test' ] && {
-  echo
-  ps --ppid "$$"
-  jobs -l
-}
-while IFS=$'\n' [ "$(($(
-    ps --ppid "$$" | grep -v 'defunct\|ps\|grep' | wc -l
-  )-2))" -gt 0 ]; do
-  read line < "$dfifo" # or implement signals
-  [ "$mode" = 'test' ] &&
-    printf "completed %s\n" "$line"
-done
+[ "$mode" = 'test' ] && finis=$'\n'"$(ps --ppid "$$"; jobs -l)" || finis=''
+while IFS=$'\n'
+  [ "$(($(ps --ppid "$$" | grep -v 'defunct\|ps\|grep' | wc -l)-2))" -gt 0 ]
+    do
+      read line < "$dfifo" # or implement signals
+      [ "$mode" = 'test' ] && finis="$finis
+completed $line"
+    done
 
-# core test exits here
-[ "$mode" = 'test' ] && exit
+# tests exit here
+[ -n "$tite" ] && echo "elapsed core time: $(($(date +%s%N)-tite))ns" && exit
+[ "$mode" = 'test' ] && echo "$finis"$'\n' && exit
 rm "$dfifo"
 
 
