@@ -1,5 +1,9 @@
 # espdiff.sh
 
+**This began as an april fools joke and fuzzing target and merged with a rewrite in bash of a sed script proof of concept**
+
+note to self: needs update
+
 **A contemporary take on diff, the terminal control sequence and shell scripting in color**
 
 operate in situ on limited resource systems or within restrictive environments
