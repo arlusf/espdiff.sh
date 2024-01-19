@@ -1,5 +1,10 @@
 # espdiff.sh
 
+note to self: need to updated version
+
+**This began as an april fools joke and fuzzing target and merged with a rewrite in bash of a sed script proof of concept**
+**Why bash? Why not, it is a capable tool everyone should learn and know more about. This is part of my "getting to know bash series of projects"**
+
 **A contemporary take on diff, the terminal control sequence and shell scripting in color**
 
 operate in situ on limited resource systems or within restrictive environments
